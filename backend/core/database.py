@@ -1,4 +1,7 @@
-from sqlalchemy import create_engine, Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, Text
+from sqlalchemy import (
+    Column, String, Integer, Boolean, Date, DateTime, Numeric, Text,
+    ForeignKey, UniqueConstraint, Index, JSON, create_engine
+)
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -78,6 +81,168 @@ class Notificacion(Base):
     def __repr__(self):
         return f"<Notificacion(id={self.id}, asunto='{self.asunto[:20]}...')>"
 
+
+class RCERun(Base):
+    __tablename__ = "rce_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
+
+    periodo = Column(String(6), nullable=False)  # YYYYMM
+    modulo = Column(String(30), nullable=False, default="RCE")  # futuro: SOL_XML, EXTRACT, etc.
+    status = Column(String(20), nullable=False, default="PENDING")  # PENDING/RUNNING/OK/ERROR/PARTIAL
+
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    error_code = Column(String(50), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    stats_json = Column(JSON, nullable=True)  # {"items":29,"xml_ok":20,...}
+
+    empresa = relationship("Empresa")  # si tienes Empresa en otro módulo
+
+    __table_args__ = (
+        Index("ix_rce_runs_ruc_periodo", "ruc_empresa", "periodo"),
+    )
+
+
+class RCEPropuestaFile(Base):
+    __tablename__ = "rce_propuesta_files"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
+    periodo = Column(String(6), nullable=False)
+
+    num_ticket = Column(String(20), nullable=True)
+    cod_proceso = Column(String(10), nullable=True)
+
+    storage_path = Column(Text, nullable=False)         # donde guardaste el ZIP/CSV
+    filename = Column(Text, nullable=True)
+    sha256 = Column(String(64), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("ruc_empresa", "periodo", name="uq_rce_propuesta_file_ruc_periodo"),
+        Index("ix_rce_propuesta_files_ruc_periodo", "ruc_empresa", "periodo"),
+    )
+
+
+class RCEPropuestaItem(Base):
+    __tablename__ = "rce_propuesta_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
+    periodo = Column(String(6), nullable=False)
+
+    car_sunat = Column(String(40), nullable=True)
+
+    fecha_emision = Column(Date, nullable=False)
+    fecha_vcto_pago = Column(Date, nullable=True)
+
+    tipo_cp = Column(String(2), nullable=False)        # 01/07/08 ...
+    serie = Column(String(10), nullable=False)
+    numero = Column(String(20), nullable=False)        # guarda como texto por seguridad
+
+    tipo_doc_identidad = Column(String(2), nullable=True)
+    ruc_emisor = Column(String(11), nullable=False)
+    razon_emisor = Column(String(200), nullable=True)
+
+    bi_gravado_dg = Column(Numeric(18, 2), nullable=True)
+    igv_dg = Column(Numeric(18, 2), nullable=True)
+    bi_gravado_dgng = Column(Numeric(18, 2), nullable=True)
+    igv_dgng = Column(Numeric(18, 2), nullable=True)
+    bi_gravado_dng = Column(Numeric(18, 2), nullable=True)
+    igv_dng = Column(Numeric(18, 2), nullable=True)
+    valor_adq_ng = Column(Numeric(18, 2), nullable=True)
+    isc = Column(Numeric(18, 2), nullable=True)
+    icbper = Column(Numeric(18, 2), nullable=True)
+    otros_trib = Column(Numeric(18, 2), nullable=True)
+    total_cp = Column(Numeric(18, 2), nullable=False)
+
+    moneda = Column(String(3), nullable=False)
+    tipo_cambio = Column(Numeric(18, 6), nullable=True)
+
+    detraccion = Column(String(5), nullable=True)      # según CSV (a veces 0/1 o código)
+    est_comp = Column(String(10), nullable=True)
+    incal = Column(String(10), nullable=True)
+    clasif_bss_sss = Column(String(50), nullable=True)
+
+    raw_json = Column(JSON, nullable=True)             # opcional: guarda fila completa del CSV
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        # idempotencia: un CP no debe duplicarse dentro de empresa+periodo
+        UniqueConstraint(
+            "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero", "fecha_emision",
+            name="uq_rce_item_key"
+        ),
+        Index("ix_rce_items_lookup", "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero"),
+    )
+
+
+class CPEEvidencia(Base):
+    __tablename__ = "cpe_evidencias"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
+    periodo = Column(String(6), nullable=False)
+
+    # referencia lógica a propuesta (no FK estricta para no complicar con id vs clave)
+    ruc_emisor = Column(String(11), nullable=False)
+    tipo_cp = Column(String(2), nullable=False)
+    serie = Column(String(10), nullable=False)
+    numero = Column(String(20), nullable=False)
+    fecha_emision = Column(Date, nullable=False)
+
+    tipo = Column(String(5), nullable=False)           # XML/PDF/TXT
+    status = Column(String(20), nullable=False, default="PENDING")  # PENDING/OK/ERROR/NOT_FOUND/AUTH/CAPTCHA
+
+    storage_path = Column(Text, nullable=True)
+    sha256 = Column(String(64), nullable=True)
+
+    error_message = Column(Text, nullable=True)
+
+    downloaded_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero", "fecha_emision", "tipo",
+            name="uq_cpe_evidencia_key"
+        ),
+        Index("ix_cpe_evidencias_status", "ruc_empresa", "periodo", "status"),
+    )
+
+
+class CPEDetalle(Base):
+    __tablename__ = "cpe_detalle"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
+    periodo = Column(String(6), nullable=False)
+
+    ruc_emisor = Column(String(11), nullable=False)
+    tipo_cp = Column(String(2), nullable=False)
+    serie = Column(String(10), nullable=False)
+    numero = Column(String(20), nullable=False)
+    fecha_emision = Column(Date, nullable=False)
+
+    extracted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    extractor_version = Column(String(20), nullable=False, default="v1")
+
+    detalle_json = Column(JSON, nullable=False)        # líneas, impuestos, conceptos, etc.
+    reglas_json = Column(JSON, nullable=True)          # deducible, cuenta contable, motivo
+
+    __table_args__ = (
+        UniqueConstraint(
+            "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero", "fecha_emision",
+            name="uq_cpe_detalle_key"
+        ),
+        Index("ix_cpe_detalle_lookup", "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero"),
+    )
 
 # --- FUNCIÓN DE INICIALIZACIÓN ---
 
