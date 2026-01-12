@@ -41,6 +41,8 @@ services:
       - ./data/sessions:/app/sessions
       - ./data/empresas:/app/empresas
       - ./data/logs:/app/logs
+      - ./data/sessions_propuesta:/app/sessions_propuesta
+      - ./data/registros:/app/registros
     networks:
       - fact_net
 
