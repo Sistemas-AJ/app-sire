@@ -3,6 +3,7 @@ from sqlalchemy import (
     ForeignKey, UniqueConstraint, Index, JSON, create_engine
 )
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
+from contextlib import contextmanager
 from sqlalchemy.sql import func
 from datetime import datetime
 import os
@@ -128,6 +129,29 @@ class RCEPropuestaFile(Base):
         Index("ix_rce_propuesta_files_ruc_periodo", "ruc_empresa", "periodo"),
     )
 
+class EmpresaSire(Base):
+    __tablename__ = "empresas_sire"
+
+    # 1 a 1 con Empresa
+    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), primary_key=True)
+
+    client_id = Column(String(120), nullable=False)
+    client_secret = Column(String(200), nullable=False)
+
+    # username requerido por tu OAuth: "ruc + usuario_sol"
+    # lo guardamos explícito para no recalcular y para auditoría
+    username = Column(String(100), nullable=False)
+
+    activo = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    empresa = relationship("Empresa")
+
+    __table_args__ = (
+        UniqueConstraint("username", name="uq_empresas_sire_username"),
+        Index("ix_empresas_sire_ruc", "ruc_empresa"),
+    )
 
 class RCEPropuestaItem(Base):
     __tablename__ = "rce_propuesta_items"
@@ -259,7 +283,16 @@ def init_db():
         print(f"❌ Error al conectar con la base de datos: {e}")
 
 # --- UTILIDAD PARA OBTENER SESIÓN ---
+
 def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@contextmanager
+def db_session():
     db = SessionLocal()
     try:
         yield db

@@ -36,6 +36,7 @@ services:
         condition: service_healthy
     volumes:
       # si tu API escribe en estas carpetas, móntalas para persistencia:
+      - ./backend:/app
       - ./data/downloads:/app/downloads
       - ./data/sessions:/app/sessions
       - ./data/empresas:/app/empresas

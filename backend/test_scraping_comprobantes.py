@@ -156,11 +156,14 @@ def descargar_factura_individual():
                         if archivos_internos:
                             # Extraemos el primer archivo (el XML)
                             nombre_archivo_original = archivos_internos[0]
-                            zip_ref.extract(nombre_archivo_original, os.getcwd())
+                            nombre_querido=archivos_internos[1]
+                            print(nombre_archivo_original)
+                            print(nombre_querido)
+                            zip_ref.extract(nombre_querido, os.getcwd())
                             
                             # 4. Renombramos al nombre estándar que tú definiste
                             # (A veces SUNAT le pone nombres larguísimos al archivo interno)
-                            os.replace(os.path.join(os.getcwd(), nombre_archivo_original), final_xml_path)
+                            os.replace(os.path.join(os.getcwd(), nombre_querido), final_xml_path)
                             
                             print(f"✅ ¡ÉXITO ROTUNDO! XML extraído y guardado en: {final_xml_path}")
                         else:
