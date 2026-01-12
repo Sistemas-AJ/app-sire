@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: facturador_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pgsunat
+      POSTGRES_USER: Lopez
+      POSTGRES_PASSWORD: Lopez
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"  # opcional; quítalo si NO quieres exponer DB en la LAN
+    networks:
+      - fact_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U Lopez -d pgsunat"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: facturador_backend
+    restart: unless-stopped
+    environment:
+      # ajusta a tu app (ejemplo típico)
+      DATABASE_URL: postgresql+psycopg2://Lopez:Lopez@postgres:5432/pgsunat
+      # cualquier otra variable que uses
+      # APP_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # si tu API escribe en estas carpetas, móntalas para persistencia:
+      - ./data/downloads:/app/downloads
+      - ./data/sessions:/app/sessions
+      - ./data/empresas:/app/empresas
+      - ./data/logs:/app/logs
+    networks:
+      - fact_net
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: buzones_web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - fact_net
+
+networks:
+  fact_net:
+    driver: bridge
