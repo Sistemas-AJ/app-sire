@@ -1,11 +1,6 @@
 import time
 from automation.utils import goto_menu, check_session
 
-def intentar_login_automatico(page, emp) -> bool:
-    """Intenta loguearse automáticamente con las credenciales de la empresa."""
-    print("🔓 Iniciando Protocolo de Login...")
-    if not goto_menu(page): return False
-
 def handle_post_login_popups(page):
     """
     Intenta cerrar modales/popups que aparecen tras el login o al cargar el menú.
