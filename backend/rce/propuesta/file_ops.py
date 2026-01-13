@@ -28,6 +28,5 @@ def save_zip_and_extract_csv(zip_bytes: bytes, out_dir: str, zip_name: str) -> s
     return os.path.join(out_dir, csv_name)
 
 def csv_to_xlsx(csv_path: str, xlsx_path: str) -> None:
-    # tu CSV de propuesta viene con separador "|"
-    df = pd.read_csv(csv_path, sep="|", dtype=str, engine="python")
+    df = pd.read_csv(csv_path, sep=",", dtype=str, engine="python")
     df.to_excel(xlsx_path, index=False)

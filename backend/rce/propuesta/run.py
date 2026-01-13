@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+from rce.propuesta.load_items import load_rce_items_from_csv
 from core.database import db_session, Empresa, EmpresaSire, RCEPropuestaFile
 
 from rce.propuesta.sire_auth import get_token_sire
@@ -62,6 +63,7 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
     csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, zip_name=nom_zip)
     xlsx_path = f"{out_dir}/propuesta_{periodo}.xlsx"
     csv_to_xlsx(csv_path, xlsx_path)
+    load_rce_items_from_csv(db, ruc, periodo, csv_path, delimiter=",")
 
     # 7) registrar en BD (upsert simple)
     row = (
