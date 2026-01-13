@@ -157,8 +157,9 @@ class RCEPropuestaItem(Base):
     __tablename__ = "rce_propuesta_items"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+
     ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
-    periodo = Column(String(6), nullable=False)
+    periodo = Column(String(6), nullable=False)  # YYYYMM
 
     car_sunat = Column(String(40), nullable=True)
 
@@ -167,7 +168,7 @@ class RCEPropuestaItem(Base):
 
     tipo_cp = Column(String(2), nullable=False)        # 01/07/08 ...
     serie = Column(String(10), nullable=False)
-    numero = Column(String(20), nullable=False)        # guarda como texto por seguridad
+    numero = Column(String(20), nullable=False)
 
     tipo_doc_identidad = Column(String(2), nullable=True)
     ruc_emisor = Column(String(11), nullable=False)
@@ -188,40 +189,41 @@ class RCEPropuestaItem(Base):
     moneda = Column(String(3), nullable=False)
     tipo_cambio = Column(Numeric(18, 6), nullable=True)
 
-    detraccion = Column(String(5), nullable=True)      # según CSV (a veces 0/1 o código)
+    detraccion = Column(String(5), nullable=True)
     est_comp = Column(String(10), nullable=True)
     incal = Column(String(10), nullable=True)
     clasif_bss_sss = Column(String(50), nullable=True)
 
-    raw_json = Column(JSON, nullable=True)             # opcional: guarda fila completa del CSV
+    raw_json = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    # Relaciones (para no duplicar datos en evidencias/detalle)
+    evidencias = relationship("CPEEvidencia", back_populates="propuesta_item", cascade="all, delete-orphan")
+    detalle = relationship("CPEDetalle", back_populates="propuesta_item", cascade="all, delete-orphan")
+
     __table_args__ = (
-        # idempotencia: un CP no debe duplicarse dentro de empresa+periodo
         UniqueConstraint(
             "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero", "fecha_emision",
             name="uq_rce_item_key"
         ),
         Index("ix_rce_items_lookup", "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero"),
+        Index("ix_rce_items_periodo", "ruc_empresa", "periodo"),
     )
 
 
 class CPEEvidencia(Base):
+    """
+    Solo estado/evidencia (XML/PDF/TXT) para un item de propuesta.
+    No duplica ruc_emisor/tipo/serie/numero porque todo eso vive en rce_propuesta_items.
+    """
     __tablename__ = "cpe_evidencias"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
-    periodo = Column(String(6), nullable=False)
 
-    # referencia lógica a propuesta (no FK estricta para no complicar con id vs clave)
-    ruc_emisor = Column(String(11), nullable=False)
-    tipo_cp = Column(String(2), nullable=False)
-    serie = Column(String(10), nullable=False)
-    numero = Column(String(20), nullable=False)
-    fecha_emision = Column(Date, nullable=False)
+    propuesta_item_id = Column(Integer, ForeignKey("rce_propuesta_items.id", ondelete="CASCADE"), nullable=False)
 
-    tipo = Column(String(5), nullable=False)           # XML/PDF/TXT
+    tipo = Column(String(5), nullable=False)  # XML/PDF/TXT
     status = Column(String(20), nullable=False, default="PENDING")  # PENDING/OK/ERROR/NOT_FOUND/AUTH/CAPTCHA
 
     storage_path = Column(Text, nullable=True)
@@ -229,45 +231,52 @@ class CPEEvidencia(Base):
 
     error_message = Column(Text, nullable=True)
 
+    # Operación / reintentos
+    attempt_count = Column(Integer, nullable=False, default=0)
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    next_retry_at = Column(DateTime(timezone=True), nullable=True)
+
     downloaded_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    propuesta_item = relationship("RCEPropuestaItem", back_populates="evidencias")
 
     __table_args__ = (
-        UniqueConstraint(
-            "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero", "fecha_emision", "tipo",
-            name="uq_cpe_evidencia_key"
-        ),
-        Index("ix_cpe_evidencias_status", "ruc_empresa", "periodo", "status"),
+        UniqueConstraint("propuesta_item_id", "tipo", name="uq_cpe_evidencia_item_tipo"),
+        Index("ix_cpe_evidencias_status", "status"),
+        Index("ix_cpe_evidencias_tipo_status", "tipo", "status"),
+        Index("ix_cpe_evidencias_retry", "next_retry_at"),
+        Index("ix_cpe_evidencias_item", "propuesta_item_id"),
     )
 
 
 class CPEDetalle(Base):
+    """
+    Resultado de extracción del XML (líneas/impuestos) + reglas contables.
+    También referenciado al item de propuesta.
+    """
     __tablename__ = "cpe_detalle"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
-    periodo = Column(String(6), nullable=False)
 
-    ruc_emisor = Column(String(11), nullable=False)
-    tipo_cp = Column(String(2), nullable=False)
-    serie = Column(String(10), nullable=False)
-    numero = Column(String(20), nullable=False)
-    fecha_emision = Column(Date, nullable=False)
+    propuesta_item_id = Column(Integer, ForeignKey("rce_propuesta_items.id", ondelete="CASCADE"), nullable=False)
 
     extracted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     extractor_version = Column(String(20), nullable=False, default="v1")
 
-    detalle_json = Column(JSON, nullable=False)        # líneas, impuestos, conceptos, etc.
-    reglas_json = Column(JSON, nullable=True)          # deducible, cuenta contable, motivo
+    detalle_json = Column(JSON, nullable=False)
+    reglas_json = Column(JSON, nullable=True)
+
+    # opcional pero muy útil para auditoría: hash del XML usado para extraer
+    source_sha256 = Column(String(64), nullable=True)
+
+    propuesta_item = relationship("RCEPropuestaItem", back_populates="detalle")
 
     __table_args__ = (
-        UniqueConstraint(
-            "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero", "fecha_emision",
-            name="uq_cpe_detalle_key"
-        ),
-        Index("ix_cpe_detalle_lookup", "ruc_empresa", "periodo", "ruc_emisor", "tipo_cp", "serie", "numero"),
+        UniqueConstraint("propuesta_item_id", "extractor_version", name="uq_cpe_detalle_item_version"),
+        Index("ix_cpe_detalle_item", "propuesta_item_id"),
     )
-
 # --- FUNCIÓN DE INICIALIZACIÓN ---
 
 def init_db():

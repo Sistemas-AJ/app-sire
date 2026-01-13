@@ -64,7 +64,9 @@ def load_rce_items_from_csv(
     # Usar utf-8-sig ayuda si el archivo fue guardado en Excel (quita el BOM del inicio)
     with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f, delimiter=delimiter)
-        
+        if not reader.fieldnames:
+            raise ValueError("CSV vacío o sin encabezados (sin compras en el periodo).")
+
         # TRUCO PRO: Limpiar espacios de los encabezados (keys) para evitar errores por "Razón  Social"
         # Esto normaliza las claves del diccionario `r`
         reader.fieldnames = [name.strip() for name in reader.fieldnames]

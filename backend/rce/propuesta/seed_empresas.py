@@ -75,6 +75,12 @@ if __name__ == "__main__":
             "activo": True,
             "sol": {"usuario": "ERRITETR", "clave": "Maxad2060"},
             "sire": {"client_id": "b907060e-b47c-42aa-89c8-95549d951c20", "client_secret": "qaAW6n4CokkhO2JS+VE+TQ=="},
+        }, 
+        "20529929821": {
+            "razon_social": "ADOLFO JURADO CONTRATISTAS GENERALES EIRL",
+            "activo": True,
+            "sol": {"usuario": "TIERTHRI", "clave": "ophicanas"},
+            "sire": {"client_id": "7e655bfd-3091-4afd-85cc-4ff9e936e3f6", "client_secret": "fqUXAh9PVRuqiSCHyHEKhQ=="},
         }
     }
     seed_empresas_y_sire(EMPRESAS)
