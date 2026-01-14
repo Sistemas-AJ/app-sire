@@ -29,7 +29,7 @@ class DescargaResult:
 
 def _guardar_y_extraer_zip(download, out_dir: str, final_xml_name: str) -> str:
     """
-    Guarda el zip descargado y extrae el primer archivo.
+    Guarda el zip descargado y extrae el XML.
     Devuelve path final del XML.
     """
     os.makedirs(out_dir, exist_ok=True)
@@ -45,10 +45,16 @@ def _guardar_y_extraer_zip(download, out_dir: str, final_xml_name: str) -> str:
             if not archivos_internos:
                 raise RuntimeError("El ZIP descargado estaba vacío.")
 
-            nombre_archivo_original = archivos_internos[1]
+            # Preferir el primer .xml; si no, el primero que haya
+            xml_candidates = [n for n in archivos_internos if n.lower().endswith(".xml")]
+            nombre_archivo_original = xml_candidates[0] if xml_candidates else archivos_internos[0]
+
             zip_ref.extract(nombre_archivo_original, out_dir)
 
             origen = os.path.join(out_dir, nombre_archivo_original)
+            # si viene dentro de carpeta, origen puede no existir directo; arma path correcto:
+            origen = os.path.join(out_dir, *nombre_archivo_original.split("/"))
+
             os.replace(origen, final_xml_path)
 
         return final_xml_path
@@ -122,6 +128,14 @@ def consultar_y_descargar_xml_individual(
 
         final_name = f"{busqueda.ruc_emisor}_{busqueda.serie}_{busqueda.numero}.xml"
         xml_path = _guardar_y_extraer_zip(download, out_dir=out_dir, final_xml_name=final_name)
+        try:
+            close_btn = frame.locator("button.close-without-header, button[aria-label='Close'].close-without-header")
+            close_btn.wait_for(state="visible", timeout=3000)
+            close_btn.click()
+            page.wait_for_timeout(500)
+        except Exception:
+            # Si no está (o cambió), no bloqueamos el job
+            pass
 
         print(f"✅ XML guardado en: {xml_path}")
         return DescargaResult(ok=True, xml_path=xml_path)

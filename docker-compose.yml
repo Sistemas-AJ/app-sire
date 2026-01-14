@@ -21,6 +21,7 @@ services:
 
 
   backend:
+    user: "${UID}:${GID}"
     build:
       context: ./backend
       dockerfile: Dockerfile

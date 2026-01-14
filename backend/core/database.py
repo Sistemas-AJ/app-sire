@@ -9,11 +9,15 @@ from datetime import datetime
 import os
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
-# Usuario: Lopez, Pass: Lopez, Host: localhost (tu máquina), Puerto: 5434 (mapeado en Docker), BD: pgsunat
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg2://Lopez:Lopez@postgres:5432/pgsunat"
-)
+# Usuario: Lopez, Pass: Lopez, BD: pgsunat
+# Dentro de Docker usamos el servicio "postgres:5432"; desde host/WSL usamos "localhost:5434".
+if "DATABASE_URL" in os.environ:
+    DATABASE_URL = os.environ["DATABASE_URL"]
+else:
+    in_docker = os.path.exists("/.dockerenv")
+    default_host = "postgres" if in_docker else "localhost"
+    default_port = "5432" if in_docker else "5434"
+    DATABASE_URL = f"postgresql+psycopg2://Lopez:Lopez@{default_host}:{default_port}/pgsunat"
 
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
