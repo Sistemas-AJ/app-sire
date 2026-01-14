@@ -270,3 +270,121 @@ Endpoint para progreso en tiempo real (polling).
 - `backend/api/routers/xml_service.py`
 - `backend/core/database.py` (`RCEPropuestaItem`, `CPEEvidencia`)
 
+---
+
+### GET `/xml/progress/global`
+Resumen global por periodo para dashboard.
+
+**Query**
+```
+?periodo=202512
+```
+
+**Respuesta**
+```json
+{
+  "periodo": "202512",
+  "total_empresas": 3,
+  "total_items": 450,
+  "total_evidencias": 420,
+  "ok": 380,
+  "error": 12,
+  "not_found": 20,
+  "auth": 3,
+  "pending": 5,
+  "remaining": 50
+}
+```
+
+**Uso óptimo**
+- Indicador general del avance por periodo.
+- Mostrar “cuántos faltan” y “cuántos tienen error”.
+
+**Código relacionado**
+- `backend/api/routers/xml_service.py`
+- `backend/core/database.py` (`RCEPropuestaItem`, `CPEEvidencia`)
+
+---
+
+### GET `/xml/report`
+Consolidado mensual de comprobantes con detalle (si existe) y resumen por estado.
+
+**Query**
+```
+?ruc=20529929821&periodo=202512
+```
+
+**Respuesta (resumen)**
+```json
+{
+  "ruc": "20529929821",
+  "periodo": "202512",
+  "total_items": 120,
+  "ok": 90,
+  "error": 5,
+  "not_found": 10,
+  "auth": 1,
+  "pending": 4,
+  "items": [
+    {
+      "item_id": 89,
+      "ruc_empresa": "20529929821",
+      "periodo": "202512",
+      "tipo_cp": "01",
+      "serie": "F001",
+      "numero": "100286",
+      "ruc_emisor": "20526422300",
+      "razon_emisor": "EMPRESA SA",
+      "fecha_emision": "2025-12-31",
+      "total_cp": 15600.0,
+      "moneda": "PEN",
+      "status": "OK",
+      "storage_path": "/app/data/registros/periodos/202512/20529929821/xml/20609209578_F001_2267.xml",
+      "detalle_json": { "lines": [ ... ] }
+    }
+  ]
+}
+```
+
+**Uso óptimo**
+- Reporte mensual para el frontend.
+- Mostrar detalle completo por comprobante.
+- Mostrar los que quedan en ERROR/NOT_FOUND para revisión manual.
+
+**Código relacionado**
+- `backend/api/routers/xml_service.py`
+- `backend/core/database.py` (`RCEPropuestaItem`, `CPEEvidencia`, `CPEDetalle`)
+
+---
+
+### GET `/xml/runs`
+Historial de ejecuciones (job status).
+
+**Query opcional**
+```
+?ruc=20529929821&periodo=202512
+```
+
+**Respuesta**
+```json
+[
+  {
+    "id": 10,
+    "ruc_empresa": "20529929821",
+    "periodo": "202512",
+    "modulo": "XML",
+    "status": "RUNNING",
+    "started_at": "2026-01-14T10:30:00Z",
+    "finished_at": null,
+    "error_message": null,
+    "stats_json": { "ok": 20, "error": 1, "not_found": 3 }
+  }
+]
+```
+
+**Uso óptimo**
+- Mostrar si el proceso está corriendo, terminó o quedó parcial.
+
+**Código relacionado**
+- `backend/api/routers/xml_service.py`
+- `backend/core/database.py` (`RCERun`)

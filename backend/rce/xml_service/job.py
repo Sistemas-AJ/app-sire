@@ -2,7 +2,7 @@ import time
 from typing import Optional
 from datetime import datetime, timezone
 
-from core.database import db_session
+from core.database import db_session, RCERun
 from .repository import (
     get_empresa,
     fetch_items_pendientes_xml,
@@ -28,6 +28,7 @@ def run_xml_job_for_empresa_periodo(
     limit: Optional[int] = None,
     headless: bool = False,
 ):
+    run_id = None
     with db_session() as db:
         emp = get_empresa(db, ruc_empresa)
         if not emp:
@@ -39,9 +40,23 @@ def run_xml_job_for_empresa_periodo(
         if not items:
             return
 
+        run = RCERun(
+            ruc_empresa=ruc_empresa,
+            periodo=periodo,
+            modulo="XML",
+            status="RUNNING",
+        )
+        db.add(run)
+        db.commit()
+        run_id = run.id
+
     # scraper fuera del scope DB para no tener session abierta en todo el loop
     scraper = SolXMLScraper(headless=headless)
     scraper.start()
+    ok_count = 0
+    error_count = 0
+    not_found_count = 0
+    auth_count = 0
     try:
         ok_login = scraper.login_and_navigate(emp.ruc, emp.usuario_sol, emp.clave_sol)
         if not ok_login:
@@ -63,6 +78,7 @@ def run_xml_job_for_empresa_periodo(
                     )
                     ev.attempt_count = MAX_ATTEMPTS_PER_ITEM
                     db.commit()
+                    not_found_count += 1
                     print(f"⏭️ SERVICIOS item_id={item.id} tipo_cp=14 marcado NOT_FOUND")
                     continue
 
@@ -104,6 +120,7 @@ def run_xml_job_for_empresa_periodo(
                     except Exception as e:
                         print(f"⚠️ Detalle no extraído item_id={item.id}: {e}")
                     db.commit()
+                    ok_count += 1
                     print(f"✅ OK item_id={item.id} xml={result.xml_path}")
                 else:
                     status = "AUTH" if result.auth_error else "ERROR"
@@ -115,6 +132,10 @@ def run_xml_job_for_empresa_periodo(
                         wait_seconds=WAIT_ON_FAIL_SECONDS,
                     )
                     db.commit()
+                    if status == "AUTH":
+                        auth_count += 1
+                    else:
+                        error_count += 1
                     print(f"❌ {status} item_id={item.id} err={result.error}")
 
                     # si fue AUTH, podrías relogin inmediato:
@@ -132,6 +153,24 @@ def run_xml_job_for_empresa_periodo(
 
     finally:
         scraper.stop()
+        if run_id:
+            status = "OK"
+            if error_count > 0 or auth_count > 0:
+                status = "PARTIAL"
+            with db_session() as db:
+                run = db.query(RCERun).filter(RCERun.id == run_id).first()
+                if run:
+                    run.status = status
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.stats_json = {
+                        "ok": ok_count,
+                        "error": error_count,
+                        "auth": auth_count,
+                        "not_found": not_found_count,
+                    }
+                    if status != "OK" and run.error_message is None:
+                        run.error_message = "Proceso con errores"
+                    db.commit()
 
 
 def _to_busqueda(item) -> "BusquedaComprobante":

@@ -8,6 +8,7 @@ import io
 from datetime import datetime
 
 from core.database import get_db, Notificacion, Empresa
+from rce.propuesta.config import REGISTROS_DIR
 
 router = APIRouter(
     prefix="/files",
@@ -84,3 +85,25 @@ def download_zip(
         media_type="application/zip", 
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.get("/download")
+def download_file(path: str = Query(..., description="Ruta absoluta dentro de REGISTROS_DIR")):
+    """
+    Descarga un archivo arbitrario siempre que esté dentro de REGISTROS_DIR.
+    """
+    if not path:
+        raise HTTPException(status_code=400, detail="path es requerido")
+
+    base = os.path.abspath(REGISTROS_DIR)
+    target = os.path.abspath(path)
+
+    if not target.startswith(base + os.sep) and target != base:
+        raise HTTPException(status_code=403, detail="Ruta no permitida")
+    if not os.path.exists(target):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    if os.path.isdir(target):
+        raise HTTPException(status_code=400, detail="La ruta no es un archivo")
+
+    filename = os.path.basename(target)
+    return FileResponse(target, filename=filename)

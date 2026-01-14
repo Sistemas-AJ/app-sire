@@ -115,6 +115,60 @@ class XMLProgressResponse(BaseModel):
     pending: int
     remaining: int
 
+class XMLProgressGlobalResponse(BaseModel):
+    periodo: str
+    total_empresas: int
+    total_items: int
+    total_evidencias: int
+    ok: int
+    error: int
+    not_found: int
+    auth: int
+    pending: int
+    remaining: int
+
+class XMLReportItemResponse(BaseModel):
+    item_id: int
+    ruc_empresa: str
+    periodo: str
+    tipo_cp: str
+    serie: str
+    numero: str
+    ruc_emisor: str
+    razon_emisor: Optional[str] = None
+    fecha_emision: date
+    total_cp: Optional[float] = None
+    moneda: Optional[str] = None
+    status: str
+    storage_path: Optional[str] = None
+    error_message: Optional[str] = None
+    detalle_json: Optional[Any] = None
+
+class XMLReportResponse(BaseModel):
+    ruc: str
+    periodo: str
+    total_items: int
+    ok: int
+    error: int
+    not_found: int
+    auth: int
+    pending: int
+    items: List[XMLReportItemResponse]
+
+class XMLRunStatusResponse(BaseModel):
+    id: int
+    ruc_empresa: str
+    periodo: str
+    modulo: str
+    status: str
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    stats_json: Optional[Any] = None
+
+    class Config:
+        orm_mode = True
+
 class EvidenciaResponse(BaseModel):
     propuesta_item_id: int
     tipo: str
