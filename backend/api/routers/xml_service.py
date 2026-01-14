@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
 
-from core.database import get_db, db_session, RCEPropuestaItem, CPEEvidencia, CPEDetalle, RCERun
+from core.database import get_db, db_session, Empresa, RCEPropuestaItem, CPEEvidencia, CPEDetalle, RCERun
 from api import schemas
 from rce.xml_service.job import run_xml_job_for_empresa_periodo, request_stop
 from rce.xml_service.repository import fetch_items_pendientes_xml
@@ -280,7 +280,7 @@ def repository(
     page_size = min(max(page_size, 1), 200)
 
     q = (
-        db.query(RCEPropuestaItem, CPEEvidencia)
+        db.query(RCEPropuestaItem, CPEEvidencia, Empresa)
         .outerjoin(
             CPEEvidencia,
             and_(
@@ -288,6 +288,7 @@ def repository(
                 CPEEvidencia.tipo == "XML",
             ),
         )
+        .join(Empresa, Empresa.ruc == RCEPropuestaItem.ruc_empresa)
     )
 
     if periodo:
@@ -322,11 +323,13 @@ def repository(
     )
 
     items = []
-    for item, ev in rows:
+    for item, ev, emp in rows:
         status_xml = ev.status if ev else "PENDING"
         items.append(
             schemas.XMLRepositoryItemResponse(
                 id=item.id,
+                ruc_empresa=item.ruc_empresa,
+                razon_social_empresa=emp.razon_social if emp else None,
                 ruc_emisor=item.ruc_emisor,
                 razon_social_emisor=item.razon_emisor,
                 tipo_comprobante=item.tipo_cp,

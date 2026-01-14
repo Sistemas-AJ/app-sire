@@ -16,16 +16,25 @@
         <div class="flex flex-wrap gap-4 flex-1">
             <!-- Periodo -->
             <div class="w-32">
-                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Periodo</label>
-                <input v-model="filters.periodo" type="text" placeholder="YYYYMM" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-primary focus:outline-none placeholder-gray-600 font-mono" />
+                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1 flex justify-between">
+                    Periodo 
+                    <button @click="togglePeriodMode" class="text-primary hover:text-white" title="Alternar manual/lista">✏️</button>
+                </label>
+                
+                <select v-if="periodMode === 'select' && availablePeriods.length > 0" v-model="filters.periodo" class="w-full bg-dark border border-gray-700 rounded-lg px-2 py-2 text-white text-sm focus:border-primary focus:outline-none appearance-none font-mono">
+                    <option v-for="p in availablePeriods" :key="p" :value="p">{{ p }}</option>
+                </select>
+                <input v-else v-model="filters.periodo" type="text" placeholder="YYYYMM" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-primary focus:outline-none placeholder-gray-600 font-mono" />
             </div>
 
             <!-- Empresa -->
             <div class="w-48">
                 <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Empresa</label>
-                <select v-model="filters.ruc_empresa" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-primary focus:outline-none appearance-none">
+                <!-- Search filter for dropdown -->
+                <input v-model="companySearch" type="text" placeholder="Buscar empresa..." class="w-full bg-dark text-xs border border-gray-700 rounded-t-lg px-2 py-1 text-gray-400 focus:outline-none border-b-0" />
+                <select v-model="filters.ruc_empresa" class="w-full bg-dark border border-gray-700 rounded-b-lg px-3 py-2 text-white text-sm focus:border-primary focus:outline-none appearance-none -mt-[1px]">
                     <option value="">Todas</option>
-                    <option v-for="c in companies" :key="c.ruc" :value="c.ruc">{{ c.razon_social }}</option>
+                    <option v-for="c in filteredCompanyOptions" :key="c.ruc" :value="c.ruc">{{ c.razon_social }}</option>
                 </select>
             </div>
 
@@ -64,6 +73,7 @@
                 <thead class="bg-dark/80 text-xs uppercase text-gray-500 sticky top-0 backdrop-blur-sm z-10">
                     <tr>
                         <th class="px-6 py-4 font-semibold">Emisión</th>
+                        <th class="px-6 py-4 font-semibold">Empresa</th>
                         <th class="px-6 py-4 font-semibold">Emisor</th>
                         <th class="px-6 py-4 font-semibold">Comprobante</th>
                         <th class="px-6 py-4 font-semibold">Total</th>
@@ -86,6 +96,10 @@
                     
                     <tr v-for="item in items" :key="item.id" class="hover:bg-dark-border/30 transition-colors group">
                         <td class="px-6 py-4 font-mono text-white">{{ item.fecha_emision }}</td>
+                        <td class="px-6 py-4">
+                             <div class="text-white font-bold truncate max-w-[150px]" :title="getCompanyName(item.ruc_empresa)">{{ getCompanyName(item.ruc_empresa) }}</div>
+                             <div class="text-xs text-gray-500 font-mono">{{ item.ruc_empresa }}</div>
+                        </td>
                         <td class="px-6 py-4">
                             <div class="text-white font-bold truncate max-w-[200px]">{{ item.razon_social_emisor || 'Desconocido' }}</div>
                             <div class="text-xs text-gray-500 font-mono">{{ item.ruc_emisor }}</div>
@@ -189,7 +203,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue';
+import { ref, onMounted, reactive, computed, watch } from 'vue';
 import api from '../apiConfig';
 
 const companies = ref([]);
@@ -218,12 +232,53 @@ const showModal = ref(false);
 const detailData = ref(null);
 
 // Methods
+const availablePeriods = ref([]);
+const periodMode = ref('select'); // select | manual
+
+// Company Search (Client-side filter for the dropdown)
+const companySearch = ref('');
+const filteredCompanyOptions = computed(() => {
+    if (!companySearch.value) return companies.value;
+    const term = companySearch.value.toLowerCase();
+    return companies.value.filter(c => 
+        c.razon_social.toLowerCase().includes(term) || 
+        c.ruc.includes(term)
+    );
+});
+
+const fetchPeriods = async () => {
+    try {
+        const res = await api.get('/propuesta/periods');
+        availablePeriods.value = res.data || [];
+        // Auto-select latest if no filter set
+        if(availablePeriods.value.length > 0 && !filters.periodo) {
+            filters.periodo = availablePeriods.value[0];
+        }
+    } catch(e) { console.error(e); }
+};
+
+const togglePeriodMode = () => {
+    periodMode.value = periodMode.value === 'select' ? 'manual' : 'select';
+};
+
 const fetchCompanies = async () => {
     try {
         const res = await api.get('/empresas/');
         companies.value = res.data || [];
     } catch(e) { console.error("Error loading companies", e); }
 };
+
+let debounceTimer = null;
+const debouncedFetch = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        pagination.page = 1; // Reset to page 1 on filter change
+        fetchItems();
+    }, 500);
+};
+
+// Reactivity
+watch(filters, debouncedFetch, { deep: true });
 
 const fetchItems = async () => {
     loading.value = true;
@@ -237,7 +292,7 @@ const fetchItems = async () => {
             search: filters.search || null
         };
         const res = await api.get('/xml/repository', { params });
-        const data = res.data; // { items: [], total: 0, page: 1, pages: 1 }
+        const data = res.data; 
         
         items.value = data.items || [];
         pagination.total = data.total || 0;
@@ -246,13 +301,8 @@ const fetchItems = async () => {
 
     } catch (e) {
         console.error("Error fetching repository", e);
-        // Mock data fallback if endpoint 404s for demo
-        /*
-        items.value = [];
-        pagination.total = 0;
-        */
         if (e.response && e.response.status === 404) {
-             items.value = []; // Endpoint not ready
+             items.value = []; 
         }
     } finally {
         loading.value = false;
@@ -262,8 +312,15 @@ const fetchItems = async () => {
 const changePage = (newPage) => {
     if (newPage >= 1 && newPage <= pagination.pages) {
         pagination.page = newPage;
-        fetchItems();
+        fetchItems(); // Direct call for pagination
     }
+};
+
+const getCompanyName = (ruc) => {
+    if (!ruc) return '-';
+    // If backend returns razon_social_empresa, use it (assumed logic if I put it in item, but here I map from loaded companies)
+    const c = companies.value.find(c => c.ruc === ruc);
+    return c ? c.razon_social : 'Empresa Externa'; // Or just return the RUC if unknown
 };
 
 const getStatusBadge = (status) => {
@@ -299,6 +356,7 @@ const closeModal = () => showModal.value = false;
 
 onMounted(async () => {
     await fetchCompanies();
+    await fetchPeriods();
     fetchItems();
 });
 

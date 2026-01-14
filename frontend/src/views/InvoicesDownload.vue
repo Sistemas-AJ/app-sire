@@ -20,8 +20,15 @@
                 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1">Periodo (YYYYMM)</label>
-                        <input v-model="config.periodo" type="text" placeholder="202501" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-primary focus:outline-none placeholder-gray-600 font-mono" />
+                        <label class="block text-xs font-bold text-gray-500 mb-1 flex justify-between">
+                            Periodo (YYYYMM)
+                             <button @click="togglePeriodMode" class="text-primary hover:text-white" title="Alternar manual/lista">✏️</button>
+                        </label>
+                        <select v-if="periodMode === 'select' && availablePeriods.length > 0" v-model="config.periodo" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-primary focus:outline-none font-mono appearance-none">
+                            <option v-for="p in availablePeriods" :key="p" :value="p">{{ p }}</option>
+                        </select>
+                        <input v-else v-model="config.periodo" type="text" placeholder="202501" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-primary focus:outline-none placeholder-gray-600 font-mono" />
+                        <p v-if="availabilityMessage" class="text-[10px] text-green-400 mt-1">{{ availabilityMessage }}</p>
                     </div>
 
                     <div>
@@ -43,19 +50,24 @@
 
             <!-- Companies Selector -->
             <div class="bg-dark-lighter p-6 rounded-xl border border-gray-800 shadow-lg flex-1 flex flex-col min-h-0">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                        🏢 Empresas
-                        <span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{{ selectedRucs.length }} / {{ filteredCompanies.length }}</span>
-                    </h3>
-                    <button @click="toggleSelectAll" class="text-xs text-primary hover:text-white transition-colors font-medium">
-                        {{ allSelected ? 'Deseleccionar' : 'Seleccionar Todo' }}
-                    </button>
+                <div class="flex flex-col gap-2 mb-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            🏢 Empresas
+                            <span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{{ selectedRucs.length }} / {{ filteredCompanies.length }}</span>
+                        </h3>
+                        <button @click="toggleSelectAll" class="text-xs text-primary hover:text-white transition-colors font-medium">
+                            {{ allSelected ? 'Deseleccionar' : 'Seleccionar Todo' }}
+                        </button>
+                    </div>
+                     <input v-model="companySearch" type="text" placeholder="Buscar empresa..." class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white text-xs focus:border-primary focus:outline-none placeholder-gray-600" />
                 </div>
 
                 <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
                     <div v-if="loadingCompanies" class="text-center py-4 text-gray-500 text-xs">Cargando empresas...</div>
-                    <div v-if="!loadingCompanies && filteredCompanies.length === 0" class="text-center py-4 text-gray-500 text-xs">No hay empresas aptas (con propuesta) para descarga.</div>
+                    <div v-if="!loadingCompanies && filteredCompanies.length === 0" class="text-center py-4 text-gray-500 text-xs text-balance px-4">
+                        {{ companySearch ? 'No se encontraron empresas con ese nombre.' : 'No hay empresas aptas (con propuesta) para el periodo seleccionado.' }}
+                    </div>
                     
                     <label v-for="company in filteredCompanies" :key="company.ruc" 
                         class="flex items-center p-3 rounded-lg border transition-colors cursor-pointer group"
@@ -275,7 +287,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import api from '../apiConfig';
 
 const companies = ref([]);
@@ -283,11 +295,43 @@ const loadingCompanies = ref(false);
 const processing = ref(false);
 const selectedRucs = ref([]);
 
+// Availability Data
+const availablePeriods = ref([]);
+const periodMode = ref('select'); // select | manual
+const availableRucs = ref([]);
+const availabilityMessage = ref('');
+const companySearch = ref('');
+
+const togglePeriodMode = () => {
+    periodMode.value = periodMode.value === 'select' ? 'manual' : 'select';
+};
+
 const now = new Date();
 const config = ref({
-    periodo: `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`,
+    periodo: '', // Will default to latest available
     limitType: 'unlimited',
     limit: 100
+});
+// ... 
+// (lines 375-380)
+
+const filteredCompanies = computed(() => {
+    let list = companies.value;
+    
+    // 1. Availability Filter (if period set)
+    if (config.value.periodo) {
+        list = list.filter(c => availableRucs.value.includes(c.ruc)); // Only available
+    } else {
+        return []; // No period, no list
+    }
+    
+    // 2. Search Filter
+    if (companySearch.value) {
+        const term = companySearch.value.toLowerCase();
+        list = list.filter(c => c.razon_social.toLowerCase().includes(term) || c.ruc.includes(term));
+    }
+    
+    return list;
 });
 
 // Progress Tracking
@@ -377,9 +421,38 @@ const fetchCompanies = async () => {
     finally { loadingCompanies.value = false; }
 };
 
-const filteredCompanies = computed(() => {
-    return companies.value.filter(c => c.propuesta_activa);
-});
+const fetchPeriods = async () => {
+    try {
+        const res = await api.get('/propuesta/periods');
+        availablePeriods.value = res.data || [];
+        // Default to first if config.periodo is empty
+        if (availablePeriods.value.length > 0 && !config.value.periodo) {
+            config.value.periodo = availablePeriods.value[0];
+        }
+    } catch (e) {
+        console.error("Error fetching periods", e);
+        // Fallback default
+        if (!config.value.periodo) config.value.periodo = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+};
+
+const fetchAvailability = async () => {
+    if (!config.value.periodo) return;
+    try {
+        const res = await api.get('/propuesta/availability', { params: { periodo: config.value.periodo }});
+        availableRucs.value = res.data.available_rucs || [];
+        availabilityMessage.value = res.data.message || '';
+    } catch (e) {
+        console.error("Error fetching availability", e);
+        availableRucs.value = [];
+        availabilityMessage.value = '';
+    }
+};
+
+// Update availability when period changes
+watch(() => config.value.periodo, fetchAvailability);
+
+
 
 const allSelected = computed(() => filteredCompanies.value.length > 0 && selectedRucs.value.length === filteredCompanies.value.length);
 const toggleSelectAll = () => selectedRucs.value = allSelected.value ? [] : filteredCompanies.value.map(c => c.ruc);
@@ -515,7 +588,8 @@ const openDetail = async (id) => {
 const closeModal = () => showModal.value = false;
 
 onMounted(async () => {
-    await fetchCompanies(); // Wait for companies so we can map names if needed
+    await fetchCompanies(); 
+    await fetchPeriods(); // Load periods and trigger availability check via watch or default
     restoreState();
 });
 onUnmounted(() => { if (pollingInterval) clearInterval(pollingInterval); });

@@ -29,32 +29,11 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-dark-border">
-          <!-- Placeholder Row -->
-          <tr class="hover:bg-dark-border/30 transition-colors">
-            <td class="px-6 py-4">
-              <div class="font-medium text-white">AJ CONTRATISTAS</div>
-              <div class="text-xs text-text-muted">20601234567</div>
-            </td>
-            <td class="px-6 py-4 text-gray-300">Orden de Pago Nro...</td>
-            <td class="px-6 py-4 text-text-muted">14/01/2026</td>
-            <td class="px-6 py-4 text-text-muted">-</td>
-            <td class="px-6 py-4">
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-500">
-                Pendiente
-              </span>
-            </td>
-            <td class="px-6 py-4 text-right">
-              <button class="text-primary hover:text-primary-dark font-medium">Ver</button>
-            </td>
-          </tr>
-           <!-- Empty State (Hidden for now) -->
-           <!--
            <tr>
              <td colspan="6" class="px-6 py-12 text-center text-text-muted">
                No hay notificaciones recientes
              </td>
            </tr>
-           -->
         </tbody>
       </table>
     </div>

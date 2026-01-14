@@ -69,3 +69,27 @@ def list_items(
         .limit(limit)
     )
     return q.all()
+
+
+@router.get("/availability", response_model=schemas.PropuestaAvailabilityResponse)
+def propuesta_availability(periodo: str, db: Session = Depends(get_db)):
+    rucs = [
+        r[0]
+        for r in db.query(RCEPropuestaFile.ruc_empresa)
+        .filter(RCEPropuestaFile.periodo == periodo)
+        .distinct()
+        .all()
+    ]
+    msg = f"{len(rucs)} empresas tienen propuesta válida en este periodo."
+    return schemas.PropuestaAvailabilityResponse(periodo=periodo, available_rucs=rucs, message=msg)
+
+
+@router.get("/periods", response_model=List[str])
+def propuesta_periods(db: Session = Depends(get_db)):
+    rows = (
+        db.query(RCEPropuestaFile.periodo)
+        .distinct()
+        .order_by(RCEPropuestaFile.periodo.desc())
+        .all()
+    )
+    return [r[0] for r in rows]

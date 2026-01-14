@@ -75,6 +75,11 @@ class PropuestaFileResponse(BaseModel):
     class Config:
         orm_mode = True
 
+class PropuestaAvailabilityResponse(BaseModel):
+    periodo: str
+    available_rucs: List[str]
+    message: str
+
 class PropuestaItemResponse(BaseModel):
     id: int
     ruc_empresa: str
@@ -179,6 +184,8 @@ class XMLRunStatusResponse(BaseModel):
 
 class XMLRepositoryItemResponse(BaseModel):
     id: int
+    ruc_empresa: str
+    razon_social_empresa: Optional[str] = None
     ruc_emisor: str
     razon_social_emisor: Optional[str] = None
     tipo_comprobante: str
