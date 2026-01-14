@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 from pathlib import Path
 
-SESSIONS_DIR = "/app/sessions_propuesta"
+from .config import SESSIONS_DIR
 
 def _path(ruc: str) -> str:
-    Path(SESSIONS_DIR).mkdir(parents=True, exist_ok=True)
+    os.makedirs(SESSIONS_DIR, exist_ok=True)
     return os.path.join(SESSIONS_DIR, f"{ruc}.json")
 
 def load_state(ruc: str) -> Dict[str, Any]:

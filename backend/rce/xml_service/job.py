@@ -9,6 +9,7 @@ from .repository import (
     mark_attempt,
 )
 from .scraper import SolXMLScraper
+from rce.xml_detail import parse_detalle, save_detalle
 from .config import MAX_ATTEMPTS_PER_ITEM, WAIT_ON_FAIL_SECONDS
 
 TIPO_CP_TO_LABEL = {
@@ -93,6 +94,16 @@ def run_xml_job_for_empresa_periodo(
                         downloaded_at=datetime.now(timezone.utc),
                         wait_seconds=0,
                     )
+                    try:
+                        detalle_json = parse_detalle(result.xml_path)
+                        save_detalle(
+                            db,
+                            propuesta_item_id=item.id,
+                            detalle_json=detalle_json,
+                            source_sha256=result.sha256,
+                        )
+                    except Exception as e:
+                        print(f"⚠️ Detalle no extraído item_id={item.id}: {e}")
                     db.commit()
                     print(f"✅ OK item_id={item.id} xml={result.xml_path}")
                 else:

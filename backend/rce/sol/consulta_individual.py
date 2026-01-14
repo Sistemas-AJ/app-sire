@@ -1,11 +1,11 @@
 # backend/rce/sol/consulta_individual.py
 import os
 import re
-import zipfile
 from dataclasses import dataclass
 from typing import Optional
 
 from playwright.sync_api import Page
+from rce.xml_detail import select_xml_from_zip
 
 @dataclass(frozen=True)
 class CredencialesSOL:
@@ -35,29 +35,10 @@ def _guardar_y_extraer_zip(download, out_dir: str, final_xml_name: str) -> str:
     os.makedirs(out_dir, exist_ok=True)
 
     temp_zip_path = os.path.join(out_dir, "temp_sunat_download.zip")
-    final_xml_path = os.path.join(out_dir, final_xml_name)
-
     download.save_as(temp_zip_path)
 
     try:
-        with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-            archivos_internos = zip_ref.namelist()
-            if not archivos_internos:
-                raise RuntimeError("El ZIP descargado estaba vacío.")
-
-            # Preferir el primer .xml; si no, el primero que haya
-            xml_candidates = [n for n in archivos_internos if n.lower().endswith(".xml")]
-            nombre_archivo_original = xml_candidates[0] if xml_candidates else archivos_internos[0]
-
-            zip_ref.extract(nombre_archivo_original, out_dir)
-
-            origen = os.path.join(out_dir, nombre_archivo_original)
-            # si viene dentro de carpeta, origen puede no existir directo; arma path correcto:
-            origen = os.path.join(out_dir, *nombre_archivo_original.split("/"))
-
-            os.replace(origen, final_xml_path)
-
-        return final_xml_path
+        return select_xml_from_zip(temp_zip_path, out_dir=out_dir, final_xml_name=final_xml_name)
     finally:
         if os.path.exists(temp_zip_path):
             os.remove(temp_zip_path)
