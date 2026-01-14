@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="p-8">
     <h2 class="text-3xl font-bold text-white mb-6">Panel de Control de Automatización</h2>
 
     <!-- Actions Card -->

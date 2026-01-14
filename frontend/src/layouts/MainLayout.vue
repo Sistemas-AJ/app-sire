@@ -1,18 +1,22 @@
 <template>
   <div class="flex h-screen bg-dark text-text-main font-sans overflow-hidden">
-    <!-- Persistent Sidebar -->
-    <Sidebar />
+    <!-- TopBar (Fixed state logic could be added, but here it's part of flex col) -->
+    
+    <!-- Collapsible Sidebar (Overlay) -->
+    <Sidebar :isOpen="isSidebarOpen" @close="isSidebarOpen = false" />
 
     <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col h-full w-full">
+    <div class="flex-1 flex flex-col h-full w-full relative">
       <!-- TopBar -->
-      <TopBar />
+      <TopBar @toggle-sidebar="toggleSidebar" />
 
       <!-- Scrollable Content -->
-      <main class="flex-1 overflow-auto bg-dark p-0 relative">
+      <main class="flex-1 overflow-auto bg-dark p-0 relative w-full">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <div class="h-full w-full"> 
+               <component :is="Component" />
+            </div>
           </transition>
         </router-view>
       </main>
@@ -21,8 +25,15 @@
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import Sidebar from '../components/Sidebar.vue';
 import TopBar from '../components/TopBar.vue';
+
+const isSidebarOpen = ref(false); // Default closed
+
+const toggleSidebar = () => {
+  isSidebarOpen.value = !isSidebarOpen.value;
+};
 </script>
 
 <style scoped>

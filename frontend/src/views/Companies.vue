@@ -1,120 +1,138 @@
 <template>
-  <div>
-    <div class="flex justify-between items-center mb-6">
-      <h2 class="text-3xl font-bold text-white">Gestión de Empresas</h2>
-      <div class="flex gap-3">
-        <button @click="showImportModal = true" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-gray-600 flex items-center gap-2">
-            📂 Importar Excel/CSV
-        </button>
-        <button @click="openModal()" class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-lg shadow-primary/20">
-            ✨ Nueva Empresa
-        </button>
+  <div class="p-8 h-full flex flex-col md:flex-row gap-8">
+    
+    <!-- Left Column: KPIs & Table (Fills remaining space) -->
+    <div class="flex-1 flex flex-col space-y-6 min-h-0">
+      
+      <!-- KPI Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card 1: Total Empresas -->
+        <div class="bg-dark-lighter p-5 rounded-xl border border-blue-500/30 relative overflow-hidden group">
+          <div class="absolute right-0 top-0 h-full w-1 bg-primary"></div>
+          <span class="text-gray-400 text-xs font-bold uppercase tracking-wider">Total Empresas</span>
+          <p class="text-4xl font-bold text-white mt-1">{{ companies.length }}</p>
+        </div>
+
+        <!-- Card 2: Con Credenciales -->
+        <div class="bg-dark-lighter p-5 rounded-xl border border-green-500/30 relative overflow-hidden">
+           <div class="absolute right-0 top-0 h-full w-1 bg-green-500"></div>
+            <span class="text-gray-400 text-xs font-bold uppercase tracking-wider">Con Credenciales</span>
+            <p class="text-4xl font-bold text-green-400 mt-1">{{ companies.filter(c => c.usuario_sol).length }}</p>
+        </div>
+
+        <!-- Card 3: Problemas Login -->
+        <div class="bg-dark-lighter p-5 rounded-xl border border-red-500/30 relative overflow-hidden">
+             <div class="absolute right-0 top-0 h-full w-1 bg-red-500"></div>
+            <span class="text-gray-400 text-xs font-bold uppercase tracking-wider">Problemas Login</span>
+            <p class="text-4xl font-bold text-red-500 mt-1">{{ companies.filter(c => c.estado_sesion === 'ERROR').length }}</p>
+        </div>
+      </div>
+
+      <!-- Table Section -->
+      <div class="bg-dark-lighter rounded-xl border border-dark-border shadow-lg flex-1 overflow-hidden flex flex-col">
+        <!-- Table Header -->
+         <div class="grid grid-cols-12 bg-dark/50 text-xs uppercase text-text-muted font-semibold border-b border-dark-border py-4 px-6">
+            <div class="col-span-2">RUC</div>
+            <div class="col-span-4">Razón Social</div>
+            <div class="col-span-2">Usuario SOL</div>
+            <div class="col-span-2">Estado Sesión</div>
+            <div class="col-span-2 text-right">Acciones</div>
+         </div>
+
+         <!-- Table Body (Scrollable) -->
+         <div class="overflow-y-auto flex-1 p-2 space-y-1">
+             <div v-if="loading" class="text-center py-8 text-blue-400">Cargando empresas...</div>
+             <div v-if="error" class="text-center py-8 text-red-500 font-bold bg-red-900/10 rounded m-2 border border-red-900/30">
+                 {{ error }}
+             </div>
+
+             <div v-if="!loading && !error" v-for="company in companies" :key="company.ruc" class="grid grid-cols-12 items-center py-3 px-4 hover:bg-dark-border/30 rounded-lg transition-colors text-sm border border-transparent hover:border-dark-border/50">
+                <div class="col-span-2 font-mono text-white">{{ company.ruc }}</div>
+                <div class="col-span-4 font-medium text-gray-300 truncate pr-2">{{ company.razon_social }}</div>
+                <div class="col-span-2">
+                    <span v-if="company.usuario_sol" class="text-text-muted">{{ company.usuario_sol }}</span>
+                    <span v-else class="text-red-500 text-xs bg-red-900/20 px-2 py-0.5 rounded">Faltante</span>
+                </div>
+                <div class="col-span-2">
+                    <span :class="getStatusClass(company.estado_sesion)" class="px-2 py-0.5 rounded-full text-xs font-semibold border inline-block text-center min-w-[80px]">
+                        {{ company.estado_sesion || 'PENDIENTE' }}
+                    </span>
+                </div>
+                <div class="col-span-2 text-right">
+                    <button class="text-primary hover:text-white transition-colors bg-dark p-1.5 rounded-md hover:bg-dark-border" title="Editar">
+                         ✏️
+                    </button>
+                </div>
+             </div>
+             
+             <!-- Empty State -->
+             <div v-if="!loading && !error && companies.length === 0" class="h-full flex flex-col items-center justify-center text-gray-500">
+                <p>No hay empresas registradas.</p>
+             </div>
+         </div>
       </div>
     </div>
 
-    <!-- Stats Rapidas -->
-    <div class="grid grid-cols-3 gap-6 mb-6">
-        <div class="bg-dark-lighter p-4 rounded-lg border border-gray-800">
-            <span class="text-gray-500 text-xs">TOTAL EMPRESAS</span>
-            <p class="text-2xl font-bold text-white">{{ companies.length }}</p>
-        </div>
-        <div class="bg-dark-lighter p-4 rounded-lg border border-gray-800">
-            <span class="text-gray-500 text-xs">CON CREDENCIALES</span>
-            <p class="text-2xl font-bold text-green-400">{{ companies.filter(c => c.usuario_sol).length }}</p>
-        </div>
-        <div class="bg-dark-lighter p-4 rounded-lg border border-gray-800">
-            <span class="text-gray-500 text-xs">PROBLEMAS LOGIN</span>
-            <p class="text-2xl font-bold text-red-400">{{ companies.filter(c => c.estado_sesion === 'ERROR').length }}</p>
-        </div>
-    </div>
+    <!-- Right Column: Registration Form (Fixed Width) -->
+    <div class="w-full md:w-[360px] flex flex-col space-y-4">
+        
+        <!-- Registration Card -->
+        <div class="bg-white rounded-2xl p-6 shadow-xl h-auto">
+            <div class="text-center mb-6">
+                <div class="w-12 h-12 bg-blue-100 text-primary rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-bold text-dark">Registrar Empresa</h2>
+                <p class="text-xs text-secondary mt-1">Ingresa los datos de la empresa</p>
+            </div>
 
-    <!-- Tabla -->
-    <div class="bg-dark-lighter rounded-xl border border-gray-800 shadow-lg overflow-hidden">
-        <table class="w-full text-left text-sm text-gray-400">
-            <thead class="bg-gray-800/50 text-xs uppercase text-gray-300">
-                <tr>
-                    <th class="px-6 py-3 font-medium">RUC</th>
-                    <th class="px-6 py-3 font-medium">Razón Social</th>
-                    <th class="px-6 py-3 font-medium">Usuario SOL</th>
-                    <th class="px-6 py-3 font-medium">Estado Sesión</th>
-                    <th class="px-6 py-3 font-medium text-right">Acciones</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-800">
-                <tr v-for="company in companies" :key="company.ruc" class="hover:bg-gray-800/30 transition-colors">
-                    <td class="px-6 py-4 font-mono text-white">{{ company.ruc }}</td>
-                    <td class="px-6 py-4 font-medium">{{ company.razon_social }}</td>
-                    <td class="px-6 py-4">
-                        <span v-if="company.usuario_sol" class="text-gray-300">{{ company.usuario_sol }}</span>
-                        <span v-else class="text-red-500 text-xs bg-red-900/20 px-2 py-1 rounded">Faltante</span>
-                    </td>
-                    <td class="px-6 py-4">
-                        <span :class="getStatusClass(company.estado_sesion)" class="px-2 py-1 rounded-full text-xs font-semibold border">
-                            {{ company.estado_sesion || 'PENDIENTE' }}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-right">
-                        <!-- TODO: Edit Functionality -->
-                        <button class="text-primary hover:text-white transition-colors">✏️</button>
-                    </td>
-                </tr>
-                <tr v-if="companies.length === 0">
-                    <td colspan="5" class="px-6 py-8 text-center text-gray-600">
-                        No hay empresas registradas. Importa una lista o crea una manualmente.
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Modal Crear -->
-    <div v-if="showModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div class="bg-dark-lighter rounded-xl border border-gray-700 shadow-2xl w-full max-w-md p-6">
-            <h3 class="text-xl font-bold text-white mb-4">Nueva Empresa</h3>
             <form @submit.prevent="saveCompany" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">RUC</label>
-                    <input v-model="form.ruc" required maxlength="11" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary" />
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Razón Social</label>
-                    <input v-model="form.razon_social" required class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary" />
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1">Usuario SOL</label>
-                        <input v-model="form.usuario_sol" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary" />
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1">Clave SOL</label>
-                        <input type="password" v-model="form.clave_sol" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary" />
+                    <label class="block text-xs font-bold text-gray-700 mb-1.5">Razón Social</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400">🏢</span>
+                        <input v-model="form.razon_social" required placeholder="Ej. Mi Empresa SAC" class="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-dark focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                     </div>
                 </div>
-                
-                <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" @click="showModal = false" class="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors">Cancelar</button>
-                    <button type="submit" class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                        Guardar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
 
-    <!-- Modal Import -->
-    <div v-if="showImportModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div class="bg-dark-lighter rounded-xl border border-gray-700 shadow-2xl w-full max-w-md p-6">
-            <h3 class="text-xl font-bold text-white mb-4">Importar Masivo</h3>
-            <div class="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center" @dragover.prevent @drop.prevent="handleDrop">
-                <p class="text-gray-400 mb-2">Arrastra tu archivo CSV, TXT o XLSX aquí</p>
-                <input type="file" ref="fileInput" @change="handleFileSelect" class="hidden" accept=".csv,.txt,.xlsx" />
-                 <button @click="$refs.fileInput.click()" class="text-primary hover:underline text-sm">o selecciona un archivo</button>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1.5">RUC</label>
+                     <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400">🔢</span>
+                        <input v-model="form.ruc" required maxlength="11" placeholder="20123456789" class="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-dark focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                    </div>
+                </div>
+
+                <div>
+                     <label class="block text-xs font-bold text-gray-700 mb-1.5">Usuario</label>
+                     <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400">👤</span>
+                        <input v-model="form.usuario_sol" placeholder="Usuario SOL" class="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-dark focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                    </div>
+                </div>
+                 <div>
+                     <label class="block text-xs font-bold text-gray-700 mb-1.5">Contraseña</label>
+                     <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400">🔑</span>
+                        <input type="password" v-model="form.clave_sol" placeholder="••••••••" class="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-dark focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/30 transition-all transform hover:scale-[1.02] mt-2">
+                    Guardar Empresa
+                </button>
+            </form>
+
+            <div class="mt-6 pt-4 border-t border-gray-100 text-center">
+                 <p class="text-xs text-gray-400 mb-3">O importa desde Excel</p>
+                 <button @click="triggerFileInput" class="w-full border border-gray-200 hover:border-gray-400 text-gray-600 font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    <span class="text-lg">📤</span> Importar
+                 </button>
+                 <input type="file" ref="fileInput" @change="handleFileSelect" class="hidden" accept=".csv,.txt,.xlsx" />
+                 <p v-if="importStatus" class="mt-2 text-xs" :class="importError ? 'text-red-500' : 'text-green-500'">{{ importStatus }}</p>
             </div>
-             <p v-if="importStatus" class="mt-4 text-sm" :class="importError ? 'text-red-400' : 'text-green-400'">{{ importStatus }}</p>
-             
-             <div class="flex justify-end mt-6">
-                <button @click="showImportModal = false" class="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white">Cerrar</button>
-             </div>
         </div>
     </div>
 
@@ -126,43 +144,44 @@ import { ref, onMounted } from 'vue';
 import api from '../apiConfig';
 
 const companies = ref([]);
-const showModal = ref(false);
-const showImportModal = ref(false);
 const form = ref({ ruc: '', razon_social: '', usuario_sol: '', clave_sol: '' });
+const fileInput = ref(null);
 const importStatus = ref('');
 const importError = ref(false);
+const loading = ref(false);
+const error = ref(null);
 
 const fetchCompanies = async () => {
     try {
         const res = await api.get('/empresas/');
-        companies.value = res.data;
+        if (Array.isArray(res.data)) {
+            companies.value = res.data;
+        } else {
+            throw new Error("La respuesta del servidor no es válida (se esperaba una lista).");
+        }
     } catch (e) {
         console.error("Error loading companies", e);
     }
 };
 
-const openModal = () => {
-    form.value = { ruc: '', razon_social: '', usuario_sol: '', clave_sol: '' };
-    showModal.value = true;
-};
-
 const saveCompany = async () => {
     try {
         await api.post('/empresas/', form.value);
-        showModal.value = false;
+        // Reset form
+        form.value = { ruc: '', razon_social: '', usuario_sol: '', clave_sol: '' };
         fetchCompanies();
+        alert("Empresa guardada correctamente");
     } catch (e) {
         alert("Error guardando empresa: " + (e.response?.data?.detail || e.message));
     }
 };
 
+const triggerFileInput = () => {
+    fileInput.value.click();
+}
+
 const handleFileSelect = async (e) => {
     const file = e.target.files[0];
-    if(file) await uploadFile(file);
-};
-
-const handleDrop = async (e) => {
-    const file = e.dataTransfer.files[0];
     if(file) await uploadFile(file);
 };
 
@@ -195,8 +214,8 @@ const uploadFile = async (file) => {
 const getStatusClass = (status) => {
     switch(status) {
         case 'OK': return 'bg-green-900/30 text-green-400 border-green-900';
-        case 'ERROR': return 'bg-red-900/30 text-red-400 border-red-900';
-        default: return 'bg-gray-800 text-gray-400 border-gray-700';
+        case 'ERROR': return 'bg-red-900/30 text-red-500 border-red-900';
+        default: return 'bg-gray-700 text-gray-400 border-gray-600';
     }
 };
 

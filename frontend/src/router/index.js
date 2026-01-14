@@ -3,6 +3,7 @@ import Dashboard from '../views/Dashboard.vue'
 import Companies from '../views/Companies.vue'
 import Automation from '../views/Automation.vue'
 import Welcome from '../views/Welcome.vue'
+import Invoices from '../views/Invoices.vue'
 
 const routes = [
     {
@@ -28,6 +29,16 @@ const routes = [
         path: '/automatizacion',
         name: 'Automation',
         component: Automation
+    },
+    {
+        path: '/comprobantes/propuesta',
+        name: 'Propuesta',
+        component: Invoices
+    },
+    {
+        path: '/comprobantes/descarga',
+        name: 'DescargaCPE',
+        component: Invoices
     }
 ]
 
