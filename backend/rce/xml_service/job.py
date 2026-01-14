@@ -40,6 +40,8 @@ def run_xml_job_for_empresa_periodo(
     headless: bool = False,
 ):
     run_id = None
+    _STOP_REQUESTED.discard((ruc_empresa, periodo))
+    _STOP_REQUESTED.discard((ruc_empresa, None))
     with db_session() as db:
         emp = get_empresa(db, ruc_empresa)
         if not emp:

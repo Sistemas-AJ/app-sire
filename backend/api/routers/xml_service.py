@@ -264,3 +264,105 @@ def list_runs(ruc: Optional[str] = None, periodo: Optional[str] = None, db: Sess
     if periodo:
         q = q.filter(RCERun.periodo == periodo)
     return q.order_by(RCERun.started_at.desc()).limit(50).all()
+
+
+@router.get("/repository", response_model=schemas.XMLRepositoryResponse)
+def repository(
+    periodo: Optional[str] = None,
+    ruc_empresa: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = Depends(get_db),
+):
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 200)
+
+    q = (
+        db.query(RCEPropuestaItem, CPEEvidencia)
+        .outerjoin(
+            CPEEvidencia,
+            and_(
+                CPEEvidencia.propuesta_item_id == RCEPropuestaItem.id,
+                CPEEvidencia.tipo == "XML",
+            ),
+        )
+    )
+
+    if periodo:
+        q = q.filter(RCEPropuestaItem.periodo == periodo)
+    if ruc_empresa:
+        q = q.filter(RCEPropuestaItem.ruc_empresa == ruc_empresa)
+
+    if search:
+        like = f"%{search}%"
+        q = q.filter(
+            (RCEPropuestaItem.ruc_emisor.ilike(like))
+            | (RCEPropuestaItem.serie.ilike(like))
+            | (RCEPropuestaItem.numero.ilike(like))
+            | (RCEPropuestaItem.razon_emisor.ilike(like))
+        )
+
+    if status:
+        # Normalizamos "MISSING" a NOT_FOUND si el frontend lo usa.
+        normalized = status.upper()
+        if normalized == "MISSING":
+            normalized = "NOT_FOUND"
+        q = q.filter(CPEEvidencia.status == normalized)
+
+    total = q.count()
+    pages = (total + page_size - 1) // page_size
+
+    rows = (
+        q.order_by(RCEPropuestaItem.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = []
+    for item, ev in rows:
+        status_xml = ev.status if ev else "PENDING"
+        items.append(
+            schemas.XMLRepositoryItemResponse(
+                id=item.id,
+                ruc_emisor=item.ruc_emisor,
+                razon_social_emisor=item.razon_emisor,
+                tipo_comprobante=item.tipo_cp,
+                serie=item.serie,
+                numero=item.numero,
+                fecha_emision=item.fecha_emision,
+                moneda=item.moneda,
+                total=float(item.total_cp) if item.total_cp is not None else None,
+                status_xml=status_xml,
+                xml_path=ev.storage_path if ev else None,
+                error_message=ev.error_message if ev else None,
+            )
+        )
+
+    return schemas.XMLRepositoryResponse(
+        total=total,
+        page=page,
+        pages=pages,
+        items=items,
+    )
+
+
+@router.post("/retry", response_model=schemas.XMLRetryResponse)
+def retry_item(item_id: int, db: Session = Depends(get_db)):
+    ev = (
+        db.query(CPEEvidencia)
+        .filter(CPEEvidencia.propuesta_item_id == item_id, CPEEvidencia.tipo == "XML")
+        .first()
+    )
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evidencia no encontrada para ese item")
+
+    ev.status = "PENDING"
+    ev.error_message = None
+    ev.next_retry_at = None
+    ev.attempt_count = 0
+    db.commit()
+
+    return schemas.XMLRetryResponse(ok=True, item_id=item_id, message="Reintento marcado")

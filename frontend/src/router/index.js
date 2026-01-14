@@ -5,6 +5,7 @@ import Automation from '../views/Automation.vue'
 import Welcome from '../views/Welcome.vue'
 import Proposal from '../views/Proposal.vue'
 import InvoicesDownload from '../views/InvoicesDownload.vue'
+import InvoicesRepository from '../views/InvoicesRepository.vue'
 
 const routes = [
     {
@@ -40,6 +41,11 @@ const routes = [
         path: '/comprobantes/descarga',
         name: 'DescargaCPE',
         component: InvoicesDownload
+    },
+    {
+        path: '/comprobantes/repositorio',
+        name: 'RepositorioCPE',
+        component: InvoicesRepository
     }
 ]
 

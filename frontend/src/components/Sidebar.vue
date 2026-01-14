@@ -92,6 +92,12 @@
               Descarga CPE
             </a>
           </router-link>
+          <router-link to="/comprobantes/repositorio" custom v-slot="{ href, navigate, isActive }">
+            <a :href="href" @click="navigate" 
+               :class="['flex items-center px-4 py-2 rounded-lg text-sm transition-colors', isActive ? 'bg-primary/20 text-primary' : 'text-gray-500 hover:text-gray-300']">
+              Repositorio
+            </a>
+          </router-link>
         </div>
       </div>
 

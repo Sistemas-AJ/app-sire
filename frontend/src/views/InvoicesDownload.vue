@@ -302,11 +302,14 @@ const loadingEvidences = ref(false);
 const showModal = ref(false);
 const detailData = ref(null);
 
+// Persistence Constants
+const STORAGE_KEY = 'xml_download_state';
+
 // --- Computed Stats ---
 const getProgress = (ruc) => progressList.value[ruc] || { percentage: 0, processedItems: 0, total_items: 0, ok: 0, error: 0, isCompleted: false };
 
 const globalStats = computed(() => {
-    // Check local progress list for completion
+    // Client-side fallback if backend global unsupported, but we will try to use backend data if available logic allows
     const list = activeDownloads.value.map(ruc => getProgress(ruc));
     const completedCompanies = list.filter(p => p.isCompleted).length;
     return { completedCompanies };
@@ -318,7 +321,6 @@ const isGlobalRunning = computed(() => {
 });
 
 const currentProcessingCompany = computed(() => {
-    // Return the first non-completed company (FIFO priority usually)
     const ruc = activeDownloads.value.find(r => !getProgress(r).isCompleted);
     if (!ruc) return null;
     return { ruc, ...getProgress(ruc) };
@@ -326,29 +328,52 @@ const currentProcessingCompany = computed(() => {
 
 // --- Methods ---
 
+const saveState = () => {
+    const state = {
+        periodo: config.value.periodo,
+        selectedRucs: selectedRucs.value, // Persist selection to restore UI
+        activeDownloads: activeDownloads.value,
+        timestamp: Date.now()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+};
+
+const clearState = () => {
+    localStorage.removeItem(STORAGE_KEY);
+};
+
+const restoreState = () => {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            const state = JSON.parse(stored);
+            // Check expiry (e.g. 24h)
+            if (Date.now() - state.timestamp < 24 * 60 * 60 * 1000) {
+                config.value.periodo = state.periodo || config.value.periodo;
+                selectedRucs.value = state.selectedRucs || [];
+                activeDownloads.value = state.activeDownloads || [];
+                
+                if (activeDownloads.value.length > 0) {
+                    console.log("Restoring active downloads session...", activeDownloads.value);
+                    startPolling();
+                }
+            } else {
+                clearState();
+            }
+        }
+    } catch (e) {
+        console.warn("Error restoring state", e);
+        clearState();
+    }
+};
+
 const fetchCompanies = async () => {
     loadingCompanies.value = true;
     try {
         const res = await api.get('/empresas/');
         companies.value = res.data || [];
-        // Optional: Auto-load active downloads if any? (Sync logic)
-        syncActiveJobs();
     } catch (e) { console.error(e); } 
     finally { loadingCompanies.value = false; }
-};
-
-const syncActiveJobs = async () => {
-    // Try to find if any job is running and add to activeDownloads
-    // Since we don't have a "get all running jobs" endpoint explicitly documented except /xml/runs?ruc=...
-    // We can iterate companies (or companies with propuesta_activa) and check /xml/progress or /xml/runs
-    // But that might be heavy. 
-    // Optimization: Check active flag or rely on user re-selecting.
-    // However, user said "el servidor ya comenzó".
-    // Let's assume user starts it. But if page refreshed, we are blind.
-    // PROPOSAL: Only logic here requested was to fix visual state locally if "server started".
-    // If I start polling anyway, I can detect progress.
-    // I will iterate 'companies' and check progress? No, too many requests.
-    // Let's rely on user selecting RUCs.
 };
 
 const allSelected = computed(() => companies.value.length > 0 && selectedRucs.value.length === companies.value.length);
@@ -361,8 +386,10 @@ const getDownloadLink = (path) => `/api/files/download?path=${encodeURIComponent
 const runDownload = async () => {
     processing.value = true;
     
-    // Add selected to active list
     selectedRucs.value.forEach(ruc => { if (!activeDownloads.value.includes(ruc)) activeDownloads.value.push(ruc); });
+
+    // Save State immediately before run
+    saveState();
 
     const finalLimit = config.value.limitType === 'custom' ? config.value.limit : null;
     const payload = {
@@ -374,20 +401,14 @@ const runDownload = async () => {
 
     try {
         await api.post('/xml/run', payload, { timeout: 120000 });
-        alert(`Descarga Iniciada. El backend procesará segundo plano.`);
+        // alert(`Descarga Iniciada.`); // Reduced noise
     } catch (e) {
-        // If timeout or error, we still START POLLING because backend might have started.
-        if (e.code === 'ECONNABORTED' || (e.response && e.response.status === 504)) {
-             alert("La petición tardó demasiado, pero el backend sigue procesando. Iniciando monitoreo...");
-        } else {
-             console.error(e);
-             alert("Error al iniciar (posible timeout): " + e.message);
+        if (e.code !== 'ECONNABORTED' && (!e.response || e.response.status !== 504)) {
+             alert("Error al iniciar: " + (e.response?.data?.detail || e.message));
         }
     } finally {
         processing.value = false;
-        // Always start polling after run attempt
         if (!pollingInterval) startPolling();
-        // Set view to first
         if (selectedRucs.value.length > 0 && !currentRuc.value) {
             viewEvidences(selectedRucs.value[0]);
         }
@@ -395,27 +416,28 @@ const runDownload = async () => {
 };
 
 const startPolling = () => {
-    if (pollingInterval) return; // Already polling
-    pollingInterval = setInterval(async () => {
-        if (activeDownloads.value.length === 0) { clearInterval(pollingInterval); pollingInterval = null; return; }
+    if (pollingInterval) return;
+    
+    // Immediate poll check
+    const pollFn = async () => {
+        if (activeDownloads.value.length === 0) { clearInterval(pollingInterval); pollingInterval = null; clearState(); return; }
+
+        // Optional: Get Global Progress to check if backend thinks we are running
+        try {
+            // User mentioned GET /xml/progress/global?periodo=...
+            // We can log it or use it to update globalStats if we wanted to rely on backend
+            // const gRes = await api.get('/xml/progress/global', { params: { periodo: config.value.periodo } });
+            // console.log("Global Progress:", gRes.data);
+        } catch(e) { /* ignore if not implemented yet */ }
 
         for (const ruc of activeDownloads.value) {
             const current = progressList.value[ruc];
             if (current && current.isCompleted) continue; 
 
             try {
-                // Determine completion
-                // 1) Get progress
-                // 2) Maybe check /xml/runs for job status if progress is ambiguous
-                
                 const res = await api.get('/xml/progress', { params: { ruc, periodo: config.value.periodo } });
                 const data = res.data;
-                // data: { ruc, total_items, total_evidencias, ok, error, not_found, auth, pending, remaining, ... }
-                
                 const processed = data.ok + data.not_found + data.error + data.auth;
-                
-                // Completion logic: remaining == 0 AND total_items > 0
-                // Or processed >= total_items
                 const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= data.total_items && data.total_items > 0);
                 
                 let pct = 0;
@@ -431,15 +453,32 @@ const startPolling = () => {
                 console.error(`Poll error ${ruc}`, e); 
             }
         }
-    }, 3000); 
+        
+        // If all completed, clear state?
+        // Maybe wait for user to explicitly close or leave?
+        // We'll leave state so they can see results even after refresh.
+        // User said: "Persistir ... cuando la app se recarga ... resume polling"
+        // But if finished, "resume polling" might stop immediately.
+        const allDone = activeDownloads.value.every(r => getProgress(r).isCompleted);
+        if (allDone) {
+            // clearState(); // Optional: Clear when ALL done? Or keep history?
+            // Better to keep it until they start a new one or "Clear" it.
+        } else {
+            saveState(); // Update state (active downloads list might haven't changed, but maybe we want to save progress? No need, progress is fetched)
+        }
+    };
+
+    pollFn(); // First run
+    pollingInterval = setInterval(pollFn, 3000); 
 };
 
 const stopAll = async () => {
     if(!confirm("¿Detener todas las descargas?")) return;
     try {
         await api.post('/xml/stop', { });
+        clearState(); // Clear persistence
+        activeDownloads.value = []; // Clear frontend active tracking
         alert("Orden de detención enviada.");
-        // We let polling reflect the stopped state eventually (or user manually refreshes)
     } catch(e) { alert("Error: " + e.message); }
 };
 
@@ -455,12 +494,25 @@ const loadEvidences = async (ruc) => {
 
 const openDetail = async (id) => {
     showModal.value = true; detailData.value = null;
-    try { const res = await api.get('/xml/detalle', { params: { item_id: id }}); detailData.value = res.data; }
-    catch (e) { alert(e.message); showModal.value = false; }
+    try { 
+        const res = await api.get('/xml/detalle', { params: { item_id: id }}); 
+        detailData.value = res.data; 
+    }
+    catch (e) { 
+        if (e.response && e.response.status === 404) {
+             alert("El detalle no está disponible aún. Es posible que el XML no se haya descargado correctamente o esté pendiente de procesamiento.");
+        } else {
+             alert("Error cargando detalle: " + e.message); 
+        }
+        showModal.value = false; 
+    }
 };
 const closeModal = () => showModal.value = false;
 
-onMounted(fetchCompanies);
+onMounted(async () => {
+    await fetchCompanies(); // Wait for companies so we can map names if needed
+    restoreState();
+});
 onUnmounted(() => { if (pollingInterval) clearInterval(pollingInterval); });
 </script>
 

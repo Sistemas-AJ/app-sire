@@ -177,6 +177,31 @@ class XMLRunStatusResponse(BaseModel):
     class Config:
         orm_mode = True
 
+class XMLRepositoryItemResponse(BaseModel):
+    id: int
+    ruc_emisor: str
+    razon_social_emisor: Optional[str] = None
+    tipo_comprobante: str
+    serie: str
+    numero: str
+    fecha_emision: date
+    moneda: Optional[str] = None
+    total: Optional[float] = None
+    status_xml: str
+    xml_path: Optional[str] = None
+    error_message: Optional[str] = None
+
+class XMLRepositoryResponse(BaseModel):
+    total: int
+    page: int
+    pages: int
+    items: List[XMLRepositoryItemResponse]
+
+class XMLRetryResponse(BaseModel):
+    ok: bool
+    item_id: int
+    message: str
+
 class EvidenciaResponse(BaseModel):
     propuesta_item_id: int
     tipo: str
