@@ -1,4 +1,5 @@
 import argparse
+import csv
 from datetime import datetime
 from rce.propuesta.load_items import load_rce_items_from_csv
 from core.database import db_session, Empresa, EmpresaSire, RCEPropuestaFile
@@ -61,6 +62,15 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
     # 6) guardar/extraer/convertir
     out_dir = ensure_dirs(periodo, ruc)
     csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, zip_name=nom_zip)
+    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        try:
+            next(reader)
+        except StopIteration:
+            total_rows = 0
+        else:
+            total_rows = sum(1 for _ in reader)
+    print(f"📊 Filas CSV (sin header): {total_rows}")
     xlsx_path = f"{out_dir}/propuesta_{periodo}.xlsx"
     csv_to_xlsx(csv_path, xlsx_path)
     load_rce_items_from_csv(db, ruc, periodo, csv_path, delimiter=",")

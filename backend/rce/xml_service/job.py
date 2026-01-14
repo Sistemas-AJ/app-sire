@@ -1,4 +1,5 @@
 import time
+from typing import Optional
 from datetime import datetime, timezone
 
 from core.database import db_session
@@ -24,7 +25,7 @@ def tipo_label_from_tipo_cp(tipo_cp: str) -> str:
 def run_xml_job_for_empresa_periodo(
     ruc_empresa: str,
     periodo: str,
-    limit: int = 200,
+    limit: Optional[int] = None,
     headless: bool = False,
 ):
     with db_session() as db:

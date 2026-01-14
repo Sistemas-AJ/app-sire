@@ -5,7 +5,7 @@ import csv
 import io
 import codecs
 
-from core.database import get_db, Empresa
+from core.database import get_db, Empresa, EmpresaSire
 from api import schemas
 
 router = APIRouter(
@@ -28,6 +28,87 @@ def crear_empresa(empresa: schemas.EmpresaCreate, db: Session = Depends(get_db))
     db.commit()
     db.refresh(nuevo)
     return nuevo
+
+@router.put("/{ruc}", response_model=schemas.EmpresaResponse)
+def actualizar_empresa(ruc: str, payload: schemas.EmpresaUpdate, db: Session = Depends(get_db)):
+    emp = db.query(Empresa).filter(Empresa.ruc == ruc).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    if payload.razon_social is not None:
+        emp.razon_social = payload.razon_social
+    if payload.usuario_sol is not None:
+        emp.usuario_sol = payload.usuario_sol
+    if payload.clave_sol is not None:
+        emp.clave_sol = payload.clave_sol
+    if payload.activo is not None:
+        emp.activo = payload.activo
+
+    db.commit()
+    db.refresh(emp)
+    return emp
+
+@router.delete("/{ruc}")
+def eliminar_empresa(ruc: str, db: Session = Depends(get_db)):
+    emp = db.query(Empresa).filter(Empresa.ruc == ruc).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    sire = db.query(EmpresaSire).filter(EmpresaSire.ruc_empresa == ruc).first()
+    if sire:
+        db.delete(sire)
+
+    db.delete(emp)
+    db.commit()
+    return {"ok": True, "ruc": ruc}
+
+@router.post("/{ruc}/credenciales", response_model=schemas.EmpresaCredencialesResponse)
+def set_credenciales(ruc: str, payload: schemas.EmpresaCredencialesRequest, db: Session = Depends(get_db)):
+    emp = db.query(Empresa).filter(Empresa.ruc == ruc).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    if payload.usuario_sol is None and payload.clave_sol is None and payload.sire_client_id is None and payload.sire_client_secret is None and payload.activo is None:
+        raise HTTPException(status_code=400, detail="No se enviaron credenciales para actualizar")
+
+    if payload.usuario_sol is not None:
+        emp.usuario_sol = payload.usuario_sol
+    if payload.clave_sol is not None:
+        emp.clave_sol = payload.clave_sol
+    if payload.activo is not None:
+        emp.activo = payload.activo
+
+    sire_payload = payload.sire_client_id is not None or payload.sire_client_secret is not None
+    if sire_payload:
+        if not (payload.sire_client_id and payload.sire_client_secret):
+            raise HTTPException(status_code=400, detail="Faltan credenciales SIRE (client_id/secret)")
+        usuario = emp.usuario_sol or payload.usuario_sol
+        if not usuario:
+            raise HTTPException(status_code=400, detail="usuario_sol es requerido para credenciales SIRE")
+
+        username = f"{ruc}{usuario}"
+        sire = db.query(EmpresaSire).filter(EmpresaSire.ruc_empresa == ruc).first()
+        if not sire:
+            sire = EmpresaSire(
+                ruc_empresa=ruc,
+                client_id=payload.sire_client_id,
+                client_secret=payload.sire_client_secret,
+                username=username,
+                activo=True,
+            )
+            db.add(sire)
+        else:
+            sire.client_id = payload.sire_client_id
+            sire.client_secret = payload.sire_client_secret
+            sire.username = username
+
+    db.commit()
+    return schemas.EmpresaCredencialesResponse(
+        ok=True,
+        ruc=ruc,
+        has_sol=bool(emp.usuario_sol and emp.clave_sol),
+        has_sire=bool(db.query(EmpresaSire).filter(EmpresaSire.ruc_empresa == ruc).first()),
+    )
 
 @router.post("/import")
 async def importar_empresas(file: UploadFile = File(...), db: Session = Depends(get_db)):

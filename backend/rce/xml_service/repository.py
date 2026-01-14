@@ -15,7 +15,7 @@ def fetch_items_pendientes_xml(
     db: Session,
     ruc_empresa: str,
     periodo: str,
-    limit: int = 200,
+    limit: Optional[int] = 200,
 ) -> List[RCEPropuestaItem]:
     """
     Devuelve items que NO tienen evidencia XML OK.
@@ -37,8 +37,9 @@ def fetch_items_pendientes_xml(
             (CPEEvidencia.id == None) | (CPEEvidencia.status != "OK")
         )
         .order_by(RCEPropuestaItem.id.asc())
-        .limit(limit)
     )
+    if limit is not None:
+        q = q.limit(limit)
     return q.all()
 
 

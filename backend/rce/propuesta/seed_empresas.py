@@ -81,6 +81,13 @@ if __name__ == "__main__":
             "activo": True,
             "sol": {"usuario": "TIERTHRI", "clave": "ophicanas"},
             "sire": {"client_id": "7e655bfd-3091-4afd-85cc-4ff9e936e3f6", "client_secret": "fqUXAh9PVRuqiSCHyHEKhQ=="},
-        }
+        },
+        "20601080428": {
+            "razon_social": "INSTITUTO MEDICO CASTILLA S.A.C.",
+            "activo": True,
+            "sol": {"usuario": "ONEVERRU", "clave": "imcSAC2023"},
+            "sire": {"client_id": "30f1bef6-cfd5-4487-b681-80895e0952ba", "client_secret": "VK/wSBpL8ertsq8bOc6hBA=="},
+        },
+
     }
     seed_empresas_y_sire(EMPRESAS)
