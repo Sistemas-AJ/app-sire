@@ -46,7 +46,7 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-bold text-white flex items-center gap-2">
                         🏢 Empresas
-                        <span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{{ selectedRucs.length }} / {{ companies.length }}</span>
+                        <span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{{ selectedRucs.length }} / {{ filteredCompanies.length }}</span>
                     </h3>
                     <button @click="toggleSelectAll" class="text-xs text-primary hover:text-white transition-colors font-medium">
                         {{ allSelected ? 'Deseleccionar' : 'Seleccionar Todo' }}
@@ -55,8 +55,9 @@
 
                 <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
                     <div v-if="loadingCompanies" class="text-center py-4 text-gray-500 text-xs">Cargando empresas...</div>
+                    <div v-if="!loadingCompanies && filteredCompanies.length === 0" class="text-center py-4 text-gray-500 text-xs">No hay empresas aptas (con propuesta) para descarga.</div>
                     
-                    <label v-for="company in companies" :key="company.ruc" 
+                    <label v-for="company in filteredCompanies" :key="company.ruc" 
                         class="flex items-center p-3 rounded-lg border transition-colors cursor-pointer group"
                         :class="selectedRucs.includes(company.ruc) ? 'bg-primary/10 border-primary/30' : 'bg-dark border-gray-800 hover:border-gray-600'"
                     >
@@ -376,8 +377,12 @@ const fetchCompanies = async () => {
     finally { loadingCompanies.value = false; }
 };
 
-const allSelected = computed(() => companies.value.length > 0 && selectedRucs.value.length === companies.value.length);
-const toggleSelectAll = () => selectedRucs.value = allSelected.value ? [] : companies.value.map(c => c.ruc);
+const filteredCompanies = computed(() => {
+    return companies.value.filter(c => c.propuesta_activa);
+});
+
+const allSelected = computed(() => filteredCompanies.value.length > 0 && selectedRucs.value.length === filteredCompanies.value.length);
+const toggleSelectAll = () => selectedRucs.value = allSelected.value ? [] : filteredCompanies.value.map(c => c.ruc);
 const getCompanyName = (ruc) => companies.value.find(c => c.ruc === ruc)?.razon_social || ruc;
 const getStatusBadge = (status) => ({ 'OK': 'bg-green-900/30 text-green-400 border-green-900', 'ERROR': 'bg-red-900/30 text-red-500 border-red-900' }[status] || 'bg-gray-700 text-gray-400');
 const getFilename = (path) => path ? path.split('/').pop() : 'Desconocido';

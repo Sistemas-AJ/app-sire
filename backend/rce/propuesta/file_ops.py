@@ -13,8 +13,9 @@ def sha256_bytes(data: bytes) -> str:
     h.update(data)
     return h.hexdigest()
 
-def save_zip_and_extract_csv(zip_bytes: bytes, out_dir: str, zip_name: str) -> str:
-    zip_path = os.path.join(out_dir, zip_name)
+def save_zip_and_extract_csv(zip_bytes: bytes, out_dir: str, periodo: str) -> str:
+    # Sobrescribir siempre por periodo (no acumular archivos)
+    zip_path = os.path.join(out_dir, f"propuesta_{periodo}.zip")
     with open(zip_path, "wb") as f:
         f.write(zip_bytes)
 
@@ -25,7 +26,14 @@ def save_zip_and_extract_csv(zip_bytes: bytes, out_dir: str, zip_name: str) -> s
         csv_name = names[0]
         z.extract(csv_name, out_dir)
 
-    return os.path.join(out_dir, csv_name)
+    # Renombrar a un nombre estable
+    extracted_path = os.path.join(out_dir, csv_name)
+    stable_csv = os.path.join(out_dir, f"propuesta_{periodo}.csv")
+    if os.path.exists(stable_csv):
+        os.remove(stable_csv)
+    os.replace(extracted_path, stable_csv)
+
+    return stable_csv
 
 def csv_to_xlsx(csv_path: str, xlsx_path: str) -> None:
     df = pd.read_csv(csv_path, sep=",", dtype=str, engine="python")

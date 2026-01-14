@@ -42,7 +42,7 @@ def run_one(ruc: str, periodo: str, fec_ini: str, fec_fin: str):
 
         # 4) datos de descarga
         nom_zip, cod_tipo, cod_proc = extraer_params_descarga(reg)
-        save_state(ruc, {"last_cod_proceso": cod_proc, "last_nom_archivo": nom_zip})
+        save_state(ruc, {"last_cod_proceso": cod_proc, "last_nom_archivo": f"propuesta_{periodo}.zip"})
 
         # 5) descargar bytes
         zip_bytes = descargar_archivo_reporte(
@@ -57,7 +57,7 @@ def run_one(ruc: str, periodo: str, fec_ini: str, fec_fin: str):
 
         # 6) guardar/extract/convert
         out_dir = ensure_dirs(periodo, ruc)
-        csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, zip_name=nom_zip)
+        csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, periodo=periodo)
         xlsx_path = f"{out_dir}/propuesta_{periodo}.xlsx"
         csv_to_xlsx(csv_path, xlsx_path)
 
@@ -74,7 +74,7 @@ def run_one(ruc: str, periodo: str, fec_ini: str, fec_fin: str):
                 num_ticket=ticket,
                 cod_proceso=cod_proc,
                 storage_path=out_dir,
-                filename=nom_zip,
+                filename=f"propuesta_{periodo}.zip",
                 sha256=digest,
             )
             db.add(row)
@@ -82,7 +82,7 @@ def run_one(ruc: str, periodo: str, fec_ini: str, fec_fin: str):
             row.num_ticket = ticket
             row.cod_proceso = cod_proc
             row.storage_path = out_dir
-            row.filename = nom_zip
+            row.filename = f"propuesta_{periodo}.zip"
             row.sha256 = digest
 
         db.commit()

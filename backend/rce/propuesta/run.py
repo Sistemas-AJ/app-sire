@@ -46,7 +46,7 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
 
     # 4) extraer params descarga
     nom_zip, cod_tipo, cod_proc = extraer_params_descarga(reg)
-    save_state(ruc, {"last_cod_proceso": cod_proc, "last_nom_archivo": nom_zip})
+    save_state(ruc, {"last_cod_proceso": cod_proc, "last_nom_archivo": f"propuesta_{periodo}.zip"})
 
     # 5) descargar zip bytes
     zip_bytes = descargar_archivo_reporte(
@@ -61,7 +61,7 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
 
     # 6) guardar/extraer/convertir
     out_dir = ensure_dirs(periodo, ruc)
-    csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, zip_name=nom_zip)
+    csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, periodo=periodo)
     with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)
         try:
@@ -88,7 +88,7 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
             num_ticket=ticket,
             cod_proceso=cod_proc,
             storage_path=out_dir,
-            filename=nom_zip,
+            filename=f"propuesta_{periodo}.zip",
             sha256=digest,
         )
         db.add(row)
@@ -96,7 +96,7 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
         row.num_ticket = ticket
         row.cod_proceso = cod_proc
         row.storage_path = out_dir
-        row.filename = nom_zip
+        row.filename = f"propuesta_{periodo}.zip"
         row.sha256 = digest
 
     db.commit()
@@ -106,7 +106,7 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
         "ticket": ticket,
         "csv": csv_path,
         "xlsx": xlsx_path,
-        "zip": f"{out_dir}/{nom_zip}",
+        "zip": f"{out_dir}/propuesta_{periodo}.zip",
     }
 
 
