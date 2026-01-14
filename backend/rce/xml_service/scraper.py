@@ -56,9 +56,14 @@ def _recover_click_nueva_consulta(page) -> bool:
         except Exception:
             pass
 
-        # buscar el texto en cualquier lugar (main o frames) y click
-        if not buscar_y_clickear(page, "Nueva Consulta de comprobantes de pago"):
-            return False
+        # click directo en el menú lateral (fuera del iframe)
+        menu_li = page.locator("li#nivel4_11_38_1_1_1")
+        if menu_li.count() > 0 and menu_li.first.is_visible():
+            menu_li.first.click()
+        else:
+            # fallback: buscar el texto en cualquier lugar (main o frames)
+            if not buscar_y_clickear(page, "Nueva Consulta de comprobantes de pago"):
+                return False
 
         # esperar que el formulario angular esté listo otra vez
         # y que el overlay haya desaparecido
@@ -176,12 +181,23 @@ class SolXMLScraper:
 
         if not res.ok:
             # Heurística simple: si el error parece login/session, marcamos auth_error
+            retried = False
             if _overlay_visible(self.page):
                 print("🧯 Detectado overlay 'Cargando...'. Recovery: click Nueva Consulta…")
-                _recover_click_nueva_consulta(self.page)
+                if _recover_click_nueva_consulta(self.page):
+                    retried = True
+                    res = consultar_y_descargar_xml_individual(
+                        self.page,
+                        busqueda,
+                        out_dir=out_dir,
+                        timeout_resultado_ms=TIMEOUT_RESULTADO_MS,
+                    )
+                    if res.ok:
+                        sha = _sha256_file(res.xml_path)
+                        return ScrapeResult(ok=True, xml_path=res.xml_path, sha256=sha)
             err = (res.error or "").lower()
             auth_like = ("login" in err) or ("autentic" in err) or ("401" in err)
-            time.sleep(WAIT_ON_FAIL_SECONDS)
+            time.sleep(WAIT_ON_FAIL_SECONDS if not retried else 2)
             self._reset_form_minimo()
             return ScrapeResult(ok=False, error=res.error, auth_error=auth_like)
 

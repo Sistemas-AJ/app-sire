@@ -27,6 +27,18 @@ class DescargaResult:
     error: Optional[str] = None
 
 
+def _wait_overlay_gone(frame, timeout_ms: int = 20000) -> bool:
+    """
+    Espera a que el overlay de carga desaparezca dentro del iframe.
+    Retorna False si sigue visible al finalizar el timeout.
+    """
+    try:
+        frame.locator("div.overlay:has-text('Cargando')").wait_for(state="hidden", timeout=timeout_ms)
+        return True
+    except Exception:
+        return False
+
+
 def _guardar_y_extraer_zip(download, out_dir: str, final_xml_name: str) -> str:
     """
     Guarda el zip descargado y extrae el XML.
@@ -60,6 +72,8 @@ def consultar_y_descargar_xml_individual(
 
         # Espera el componente angular
         frame.locator("consulta-comprobante-individual").wait_for(state="visible", timeout=15000)
+        if not _wait_overlay_gone(frame, timeout_ms=20000):
+            return DescargaResult(ok=False, error="Overlay de carga activo (sin respuesta)")
 
         print("📝 Llenando datos del comprobante...")
 

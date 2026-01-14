@@ -65,14 +65,12 @@ def run_xml_job_for_empresa_periodo(
                     print(f"⏭️ SERVICIOS item_id={item.id} tipo_cp=14 marcado NOT_FOUND")
                     continue
 
-                # idempotencia: si ya está OK, saltar
+                # idempotencia: si ya está OK o marcado NOT_FOUND, saltar
                 if ev.status == "OK":
                     print(f"⏭️ SKIP OK item_id={item.id}")
                     continue
-
-                # límite de intentos
-                if (ev.attempt_count or 0) >= MAX_ATTEMPTS_PER_ITEM:
-                    print(f"⏭️ SKIP MAX_ATTEMPTS item_id={item.id} attempts={ev.attempt_count}")
+                if ev.status == "NOT_FOUND":
+                    print(f"⏭️ SKIP NOT_FOUND item_id={item.id}")
                     continue
 
             # intentamos descargar (sin DB abierta)
