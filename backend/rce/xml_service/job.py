@@ -19,6 +19,17 @@ TIPO_CP_TO_LABEL = {
     "08": "Factura - Nota de Débito",
 }
 
+_STOP_REQUESTED = set()
+
+def request_stop(ruc: Optional[str] = None, periodo: Optional[str] = None) -> None:
+    if ruc or periodo:
+        _STOP_REQUESTED.add((ruc, periodo))
+        return
+    _STOP_REQUESTED.add((None, None))
+
+def _should_stop(ruc: str, periodo: str) -> bool:
+    return (None, None) in _STOP_REQUESTED or (ruc, None) in _STOP_REQUESTED or (ruc, periodo) in _STOP_REQUESTED
+
 def tipo_label_from_tipo_cp(tipo_cp: str) -> str:
     return TIPO_CP_TO_LABEL.get(tipo_cp, "Factura")
 
@@ -34,7 +45,23 @@ def run_xml_job_for_empresa_periodo(
         if not emp:
             raise RuntimeError(f"No existe empresa activa {ruc_empresa}")
 
-        items = fetch_items_pendientes_xml(db, ruc_empresa, periodo, limit=limit)
+        emp_ruc = emp.ruc
+        emp_usuario = emp.usuario_sol
+        emp_clave = emp.clave_sol
+
+        raw_items = fetch_items_pendientes_xml(db, ruc_empresa, periodo, limit=limit)
+        items = [
+            {
+                "id": it.id,
+                "ruc_empresa": it.ruc_empresa,
+                "periodo": it.periodo,
+                "tipo_cp": it.tipo_cp,
+                "serie": it.serie,
+                "numero": it.numero,
+                "ruc_emisor": it.ruc_emisor,
+            }
+            for it in raw_items
+        ]
         print(f"📌 Pendientes XML: {len(items)} | empresa={ruc_empresa} periodo={periodo}")
 
         if not items:
@@ -57,18 +84,23 @@ def run_xml_job_for_empresa_periodo(
     error_count = 0
     not_found_count = 0
     auth_count = 0
+    stopped = False
     try:
-        ok_login = scraper.login_and_navigate(emp.ruc, emp.usuario_sol, emp.clave_sol)
+        ok_login = scraper.login_and_navigate(emp_ruc, emp_usuario, emp_clave)
         if not ok_login:
             raise RuntimeError("No se pudo loguear/navegar en SOL")
 
         for item in items:
+            if _should_stop(emp_ruc, periodo):
+                stopped = True
+                print(f"🛑 Stop solicitado. Deteniendo empresa {emp_ruc} periodo {periodo}.")
+                break
             # reabrimos sesión DB por item (simple y seguro)
             with db_session() as db:
-                ev = get_or_create_evidencia_xml(db, item.id)
+                ev = get_or_create_evidencia_xml(db, item["id"])
 
                 # Tipo 14 (Servicios): no hay etiqueta XML para descargar.
-                if str(item.tipo_cp).strip() == "14":
+                if str(item["tipo_cp"]).strip() == "14":
                     mark_attempt(
                         db,
                         ev,
@@ -79,24 +111,24 @@ def run_xml_job_for_empresa_periodo(
                     ev.attempt_count = MAX_ATTEMPTS_PER_ITEM
                     db.commit()
                     not_found_count += 1
-                    print(f"⏭️ SERVICIOS item_id={item.id} tipo_cp=14 marcado NOT_FOUND")
+                    print(f"⏭️ SERVICIOS item_id={item['id']} tipo_cp=14 marcado NOT_FOUND")
                     continue
 
                 # idempotencia: si ya está OK o marcado NOT_FOUND, saltar
                 if ev.status == "OK":
-                    print(f"⏭️ SKIP OK item_id={item.id}")
+                    print(f"⏭️ SKIP OK item_id={item['id']}")
                     continue
                 if ev.status == "NOT_FOUND":
-                    print(f"⏭️ SKIP NOT_FOUND item_id={item.id}")
+                    print(f"⏭️ SKIP NOT_FOUND item_id={item['id']}")
                     continue
 
             # intentamos descargar (sin DB abierta)
             busq = _to_busqueda(item)
 
-            result = scraper.descargar_xml(item.ruc_empresa, item.periodo, busq)
+            result = scraper.descargar_xml(item["ruc_empresa"], item["periodo"], busq)
 
             with db_session() as db:
-                ev = get_or_create_evidencia_xml(db, item.id)
+                ev = get_or_create_evidencia_xml(db, item["id"])
 
                 if result.ok:
                     mark_attempt(
@@ -113,15 +145,15 @@ def run_xml_job_for_empresa_periodo(
                         detalle_json = parse_detalle(result.xml_path)
                         save_detalle(
                             db,
-                            propuesta_item_id=item.id,
+                            propuesta_item_id=item["id"],
                             detalle_json=detalle_json,
                             source_sha256=result.sha256,
                         )
                     except Exception as e:
-                        print(f"⚠️ Detalle no extraído item_id={item.id}: {e}")
+                        print(f"⚠️ Detalle no extraído item_id={item['id']}: {e}")
                     db.commit()
                     ok_count += 1
-                    print(f"✅ OK item_id={item.id} xml={result.xml_path}")
+                    print(f"✅ OK item_id={item['id']} xml={result.xml_path}")
                 else:
                     status = "AUTH" if result.auth_error else "ERROR"
                     mark_attempt(
@@ -136,13 +168,13 @@ def run_xml_job_for_empresa_periodo(
                         auth_count += 1
                     else:
                         error_count += 1
-                    print(f"❌ {status} item_id={item.id} err={result.error}")
+                    print(f"❌ {status} item_id={item['id']} err={result.error}")
 
                     # si fue AUTH, podrías relogin inmediato:
                     if status == "AUTH":
                         print("🔁 Re-login por AUTH…")
                         try:
-                            ok = scraper.login_and_navigate(emp.ruc, emp.usuario_sol, emp.clave_sol)
+                            ok = scraper.login_and_navigate(emp_ruc, emp_usuario, emp_clave)
                             if not ok:
                                 print("⚠️ Re-login falló, continuando con el siguiente…")
                         except Exception as e:
@@ -155,7 +187,9 @@ def run_xml_job_for_empresa_periodo(
         scraper.stop()
         if run_id:
             status = "OK"
-            if error_count > 0 or auth_count > 0:
+            if stopped:
+                status = "STOPPED"
+            elif error_count > 0 or auth_count > 0:
                 status = "PARTIAL"
             with db_session() as db:
                 run = db.query(RCERun).filter(RCERun.id == run_id).first()
@@ -168,19 +202,21 @@ def run_xml_job_for_empresa_periodo(
                         "auth": auth_count,
                         "not_found": not_found_count,
                     }
-                    if status != "OK" and run.error_message is None:
+                    if status == "STOPPED":
+                        run.error_message = "Detenido por el usuario"
+                    elif status != "OK" and run.error_message is None:
                         run.error_message = "Proceso con errores"
                     db.commit()
 
 
 def _to_busqueda(item) -> "BusquedaComprobante":
     # Mapeo tipo_cp → label del dropdown (ajusta si aparecen más)
-    tipo_label = tipo_label_from_tipo_cp(item.tipo_cp)
+    tipo_label = tipo_label_from_tipo_cp(item["tipo_cp"])
 
     from rce.sol.consulta_individual import BusquedaComprobante
     return BusquedaComprobante(
-        ruc_emisor=item.ruc_emisor,
-        serie=item.serie,
-        numero=item.numero,
+        ruc_emisor=item["ruc_emisor"],
+        serie=item["serie"],
+        numero=item["numero"],
         tipo_label=tipo_label,
     )

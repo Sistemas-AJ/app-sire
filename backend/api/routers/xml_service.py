@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from core.database import get_db, db_session, RCEPropuestaItem, CPEEvidencia, CPEDetalle, RCERun
 from api import schemas
-from rce.xml_service.job import run_xml_job_for_empresa_periodo
+from rce.xml_service.job import run_xml_job_for_empresa_periodo, request_stop
 from rce.xml_service.repository import fetch_items_pendientes_xml
 
 
@@ -42,6 +42,15 @@ def run_xml(req: schemas.XMLRunRequest):
             errors.append(f"{ruc}: {e}")
 
     return schemas.XMLRunResponse(ok=len(errors) == 0, processed_rucs=processed, errors=errors)
+
+
+@router.post("/stop", response_model=schemas.XMLStopResponse)
+def stop_xml(req: schemas.XMLStopRequest):
+    request_stop(req.ruc, req.periodo)
+    msg = "Stop solicitado"
+    if req.ruc or req.periodo:
+        msg = f"Stop solicitado para ruc={req.ruc or '*'} periodo={req.periodo or '*'}"
+    return schemas.XMLStopResponse(ok=True, message=msg)
 
 
 @router.get("/pending", response_model=List[schemas.PropuestaItemResponse])

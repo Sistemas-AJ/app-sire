@@ -23,6 +23,21 @@
                         <label class="block text-xs font-bold text-gray-500 mb-1">Periodo (YYYYMM)</label>
                         <input v-model="config.periodo" type="text" placeholder="202501" class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-primary focus:outline-none placeholder-gray-600 font-mono" />
                     </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1">Límite de Descarga</label>
+                        <div class="flex items-center gap-3">
+                            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                                <input type="radio" v-model="config.limitType" value="unlimited" name="limit" class="text-primary focus:ring-primary" />
+                                <span>Todo (Sin límite)</span>
+                            </label>
+                             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                                <input type="radio" v-model="config.limitType" value="custom" name="limit" class="text-primary focus:ring-primary" />
+                                <span>Límite (Cant.)</span>
+                            </label>
+                        </div>
+                        <input v-if="config.limitType === 'custom'" v-model.number="config.limit" type="number" class="mt-2 w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white text-xs focus:border-primary focus:outline-none" placeholder="Ej. 100" />
+                    </div>
                 </div>
             </div>
 
@@ -48,7 +63,7 @@
                         <input type="checkbox" :value="company.ruc" v-model="selectedRucs" class="hidden" />
                         
                         <!-- Status Indicator (Just aesthetic or reusing prop active) -->
-                        <div class="w-2 h-2 rounded-full mr-3 flex-shrink-0 bg-gray-600"></div>
+                        <div class="w-2 h-2 rounded-full mr-3 flex-shrink-0" :class="company.propuesta_activa ? 'bg-green-500' : 'bg-gray-600'"></div>
                         
                         <div class="flex-1 min-w-0">
                             <p class="text-sm font-bold text-gray-200 truncate group-hover:text-white transition-colors">{{ company.razon_social }}</p>
@@ -77,64 +92,96 @@
             </div>
         </div>
 
-        <!-- Right Panel: Progress & Results -->
+        <!-- Right Panel: Dashboard & Results -->
         <div class="w-full xl:w-2/3 flex flex-col gap-6 min-h-0">
              
-             <!-- Progress Tracking Area -->
-             <div v-if="activeDownloads.length > 0" class="bg-dark-lighter p-6 rounded-xl border border-gray-800 shadow-lg flex-shrink-0">
-                <h3 class="text-lg font-bold text-white mb-4">📊 Progreso de Descarga</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto custom-scrollbar">
-                    <div v-for="progress in progressList" :key="progress.ruc" 
-                        @click="viewEvidences(progress.ruc)"
-                        class="bg-gray-800/50 border border-gray-700 hover:border-primary/50 p-4 rounded-lg cursor-pointer transition-all relative overflow-hidden group">
-                        
-                        <!-- Loading shimmer if pending usually -->
+             <!-- Wait/Idle State -->
+             <div v-if="activeDownloads.length === 0" class="flex-1 bg-dark-lighter rounded-xl border border-gray-800 border-dashed flex flex-col items-center justify-center text-gray-600">
+                 <div class="text-5xl mb-4 opacity-50">📡</div>
+                 <p class="text-lg font-medium">Esperando iniciar descarga...</p>
+                 <p class="text-sm">Selecciona empresas a la izquierda y pulsa Iniciar</p>
+             </div>
+
+             <!-- Global Dashboard (Active Run) -->
+             <div v-if="activeDownloads.length > 0" class="bg-dark-lighter p-6 rounded-xl border border-gray-800 shadow-lg flex-shrink-0 animate-fade-in-up">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                             <span v-if="isGlobalRunning" class="relative flex h-3 w-3 mr-1">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                            </span>
+                            <span v-else class="text-gray-500">⏹️</span>
+                            Progreso Global
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-1">Empresas Completadas: <span class="text-white font-bold">{{ globalStats.completedCompanies }} / {{ activeDownloads.length }}</span></p>
+                    </div>
+                    <button @click="stopAll" class="bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900 px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                        🛑 Detener Todo
+                    </button>
+                </div>
+
+                <!-- Current Company Banner -->
+                <div v-if="currentProcessingCompany" class="bg-blue-900/10 border border-blue-900/30 rounded-lg p-3 mb-4 flex items-center gap-4 animate-pulse-soft">
+                    <div class="p-2 bg-blue-900/30 rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Procesando Actualmente</p>
+                        <p class="text-white font-bold truncate">{{ getCompanyName(currentProcessingCompany.ruc) }}</p>
+                        <p class="text-xs text-gray-400 mt-0.5">
+                            <span class="text-white font-mono">{{ currentProcessingCompany.processedItems }}</span> de {{ currentProcessingCompany.total_items }} items
+                             <span class="text-gray-600 mx-1">|</span>
+                             <span class="text-green-400">{{ currentProcessingCompany.ok }} OK</span>, 
+                             <span class="text-red-400">{{ currentProcessingCompany.error }} ERR</span>,
+                             <span class="text-yellow-500">{{ currentProcessingCompany.pending }} Pendientes</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Cards Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    <div v-for="ruc in activeDownloads" :key="ruc" 
+                        @click="viewEvidences(ruc)"
+                        class="bg-gray-800/50 border border-gray-700 hover:border-primary/50 p-4 rounded-lg cursor-pointer transition-all relative overflow-hidden group"
+                        :class="{'border-green-500/50 bg-green-900/10': getProgress(ruc).isCompleted}">
                         
                         <div class="flex justify-between items-start mb-2 relative z-10">
-                             <div>
-                                <h4 class="text-white font-bold text-sm truncate w-48">{{ getCompanyName(progress.ruc) }}</h4>
-                                <span class="text-[10px] text-gray-500 font-mono">{{ progress.ruc }}</span>
+                             <div class="min-w-0">
+                                <h4 class="text-gray-300 font-bold text-xs truncate">{{ getCompanyName(ruc) }}</h4>
+                                <span class="text-[10px] text-gray-500 font-mono">{{ ruc }}</span>
                             </div>
-                            <div class="text-right">
-                                <span class="text-lg font-bold text-primary">{{ progress.percentage }}%</span>
-                            </div>
+                            <!-- Status Badge -->
+                            <span v-if="getProgress(ruc).isCompleted" class="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded border border-green-800 shadow-sm shadow-green-900/20">COMPLETADO</span>
+                            <span v-else class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded">{{ getProgress(ruc).percentage }}%</span>
                         </div>
 
-                        <!-- Progress Bar -->
-                        <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden mb-3 relative z-10">
-                            <div class="bg-primary h-full transition-all duration-500" :style="{ width: progress.percentage + '%' }"></div>
+                        <!-- Mini Bar -->
+                        <div class="w-full bg-gray-700 h-1.5 rounded-full overflow-hidden mb-2 relative z-10">
+                            <div class="bg-primary h-full transition-all duration-500" :style="{ width: getProgress(ruc).percentage + '%' }"></div>
                         </div>
 
-                        <!-- Stats Grid -->
-                        <div class="grid grid-cols-4 gap-2 text-center relative z-10">
-                            <div class="bg-green-900/20 rounded py-1 px-1 border border-green-900/50">
-                                <div class="text-xs font-bold text-green-400">{{ progress.ok }}</div>
-                                <div class="text-[8px] text-gray-500 uppercase">OK</div>
-                            </div>
-                            <div class="bg-red-900/20 rounded py-1 px-1 border border-red-900/50">
-                                <div class="text-xs font-bold text-red-400">{{ progress.error + progress.auth }}</div>
-                                <div class="text-[8px] text-gray-500 uppercase">Err</div>
-                            </div>
-                             <div class="bg-yellow-900/20 rounded py-1 px-1 border border-yellow-900/50">
-                                <div class="text-xs font-bold text-yellow-400">{{ progress.pending }}</div>
-                                <div class="text-[8px] text-gray-500 uppercase">Pend</div>
-                            </div>
-                            <div class="bg-gray-700/30 rounded py-1 px-1 border border-gray-700">
-                                <div class="text-xs font-bold text-gray-400">{{ progress.total_items }}</div>
-                                <div class="text-[8px] text-gray-500 uppercase">Total</div>
-                            </div>
+                        <div class="text-[10px] text-gray-500 flex justify-between relative z-10">
+                             <span>{{ getProgress(ruc).processedItems }}/{{ getProgress(ruc).total_items }}</span>
+                             <span class="space-x-1">
+                                 <span v-if="getProgress(ruc).ok > 0" class="text-green-500">{{ getProgress(ruc).ok }} OK</span>
+                                 <span v-if="getProgress(ruc).error > 0" class="text-red-500">{{ getProgress(ruc).error }} ERR</span>
+                             </span>
                         </div>
                         
-                        <div class="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+                        <!-- Pulse effect if running -->
+                         <!-- <div v-if="!getProgress(ruc).isCompleted" class="absolute inset-0 bg-primary/5 animate-pulse pointer-events-none"></div> -->
                     </div>
                 </div>
              </div>
 
              <!-- Evidence Explorer -->
-             <div class="bg-dark-lighter p-6 rounded-xl border border-gray-800 shadow-lg flex-1 flex flex-col min-h-0 relative">
+             <div v-if="activeDownloads.length > 0" class="bg-dark-lighter p-6 rounded-xl border border-gray-800 shadow-lg flex-1 flex flex-col min-h-0 relative animate-fade-in-up delay-100">
                 <div v-if="!currentRuc" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 z-10 bg-dark-lighter/50 backdrop-blur-sm rounded-xl">
                     <div class="text-4xl mb-4">📂</div>
-                    <p>Selecciona una empresa del panel de progreso (o inicia una descarga) para ver los detalles.</p>
+                    <p>Selecciona una empresa para ver los detalles.</p>
                 </div>
 
                 <div v-else class="flex flex-col h-full">
@@ -151,9 +198,6 @@
                         </button>
                     </div>
 
-                    <!-- Filters / Search could go here -->
-
-                    <!-- Table -->
                     <div class="flex-1 overflow-y-auto custom-scrollbar border border-dark-border rounded-lg bg-dark/30">
                         <table class="w-full text-left text-sm text-gray-400">
                             <thead class="bg-dark/80 text-xs uppercase text-gray-500 sticky top-0 backdrop-blur-sm">
@@ -161,36 +205,18 @@
                                     <th class="px-4 py-3 font-semibold">ID</th>
                                     <th class="px-4 py-3 font-semibold">Archivo</th>
                                     <th class="px-4 py-3 font-semibold">Estado</th>
-                                    <th class="px-4 py-3 font-semibold">Intentos</th>
                                     <th class="px-4 py-3 font-semibold text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-dark-border">
-                                <tr v-if="loadingEvidences" class="animate-pulse">
-                                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">Cargando evidencias...</td>
-                                </tr>
                                 <tr v-for="item in evidences" :key="item.propuesta_item_id" class="hover:bg-dark-border/30 transition-colors">
                                     <td class="px-4 py-3 font-mono text-xs">{{ item.propuesta_item_id }}</td>
-                                    <td class="px-4 py-3">
-                                        <div class="text-white truncate max-w-[200px]" :title="item.storage_path">{{ getFilename(item.storage_path) }}</div>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <span :class="getStatusBadge(item.status)" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border">
-                                            {{ item.status }}
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-xs">{{ item.attempt_count }}</td>
+                                    <td class="px-4 py-3"><div class="text-white truncate max-w-[200px]" :title="item.storage_path">{{ getFilename(item.storage_path) }}</div></td>
+                                    <td class="px-4 py-3"><span :class="getStatusBadge(item.status)" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border">{{ item.status }}</span></td>
                                     <td class="px-4 py-3 text-right space-x-2">
-                                        <a v-if="item.status === 'OK'" :href="getDownloadLink(item.storage_path)" target="_blank" class="text-green-400 hover:text-green-300 font-bold text-xs underline" title="Descargar XML">
-                                            XML
-                                        </a>
-                                        <button @click="openDetail(item.propuesta_item_id)" class="text-blue-400 hover:text-blue-300 font-bold text-xs underline">
-                                            Ver Detalle
-                                        </button>
+                                        <a v-if="item.status === 'OK'" :href="getDownloadLink(item.storage_path)" target="_blank" class="text-green-400 hover:text-green-300 font-bold text-xs underline">XML</a>
+                                        <button @click="openDetail(item.propuesta_item_id)" class="text-blue-400 hover:text-blue-300 font-bold text-xs underline">Ver Detalle</button>
                                     </td>
-                                </tr>
-                                <tr v-if="!loadingEvidences && evidences.length === 0">
-                                    <td colspan="5" class="px-4 py-8 text-center text-gray-600">No hay evidencias registradas para este periodo.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -198,40 +224,35 @@
                 </div>
              </div>
         </div>
-
     </div>
 
-    <!-- Detail Modal -->
+    <!-- Modal -->
     <div v-if="showModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click.self="closeModal">
         <div class="bg-dark-lighter w-full max-w-2xl rounded-2xl border border-gray-700 shadow-2xl flex flex-col max-h-[90vh]">
             <div class="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50 rounded-t-2xl">
                 <h3 class="text-xl font-bold text-white">📄 Detalle del Comprobante</h3>
                 <button @click="closeModal" class="text-gray-400 hover:text-white transition-colors text-2xl leading-none">&times;</button>
             </div>
-            
             <div class="flex-1 overflow-y-auto p-6 custom-scrollbar" v-if="detailData">
-                
                 <div class="grid grid-cols-2 gap-4 mb-6">
                     <div class="bg-dark p-3 rounded-lg border border-gray-700">
                         <span class="text-xs text-gray-500 uppercase block mb-1">Fecha Emisión</span>
                         <span class="text-white font-mono">{{ detailData.detalle_json?.issue_date }}</span>
                     </div>
                     <div class="bg-dark p-3 rounded-lg border border-gray-700">
-                        <span class="text-xs text-gray-500 uppercase block mb-1">Moneda</span>
+                         <span class="text-xs text-gray-500 uppercase block mb-1">Moneda</span>
                         <span class="text-white font-mono">{{ detailData.detalle_json?.currency }}</span>
                     </div>
                      <div class="bg-green-900/10 p-3 rounded-lg border border-green-900/30">
                         <span class="text-xs text-green-500 uppercase block mb-1">Total a Pagar</span>
                         <span class="text-green-400 font-bold text-lg font-mono">{{ detailData.detalle_json?.totals?.payable_amount }}</span>
                     </div>
-                    <div class="bg-blue-900/10 p-3 rounded-lg border border-blue-900/30">
+                     <div class="bg-blue-900/10 p-3 rounded-lg border border-blue-900/30">
                         <span class="text-xs text-blue-500 uppercase block mb-1">Impuestos (IGV)</span>
                         <span class="text-blue-400 font-bold text-lg font-mono">{{ detailData.detalle_json?.totals?.tax_amount }}</span>
                     </div>
                 </div>
-
-                <h4 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-700 pb-2">Items / Líneas</h4>
-                
+                <!-- Lines -->
                 <div class="space-y-2">
                     <div v-for="(line, idx) in detailData.detalle_json?.lines" :key="idx" class="bg-gray-800/30 p-3 rounded border border-gray-800 flex justify-between items-center text-sm">
                         <div class="flex items-center gap-3">
@@ -241,19 +262,14 @@
                         <span class="text-white font-mono font-bold">{{ line.line_total }}</span>
                     </div>
                 </div>
-
-                <div class="mt-6 pt-4 border-t border-gray-800 text-xs text-gray-600 font-mono break-all">
+                <!-- Debug SHA -->
+                 <div class="mt-6 pt-4 border-t border-gray-800 text-xs text-gray-600 font-mono break-all">
                     SHA256: {{ detailData.source_sha256 }}
                 </div>
-
             </div>
-            
-            <div v-else class="flex-1 flex items-center justify-center p-12">
-                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            </div>
+            <div v-else class="flex-1 flex items-center justify-center p-12"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
         </div>
     </div>
-
   </div>
 </template>
 
@@ -261,181 +277,207 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import api from '../apiConfig';
 
-// Data
 const companies = ref([]);
 const loadingCompanies = ref(false);
 const processing = ref(false);
 const selectedRucs = ref([]);
 
-// Setup Dates
 const now = new Date();
 const config = ref({
-    periodo: `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
+    periodo: `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`,
+    limitType: 'unlimited',
+    limit: 100
 });
 
-// Progress
-const activeDownloads = ref([]); // List of RUCs being tracked
-const progressList = ref({}); // Map RUC -> Stats Object
+// Progress Tracking
+const activeDownloads = ref([]); 
+const progressList = ref({}); 
 let pollingInterval = null;
 
-// Evidences (Current view RUC)
+// Evidence Explorer
 const currentRuc = ref(null);
 const evidences = ref([]);
 const loadingEvidences = ref(false);
-
-// Detail Modal
+// Modal
 const showModal = ref(false);
 const detailData = ref(null);
+
+// --- Computed Stats ---
+const getProgress = (ruc) => progressList.value[ruc] || { percentage: 0, processedItems: 0, total_items: 0, ok: 0, error: 0, isCompleted: false };
+
+const globalStats = computed(() => {
+    // Check local progress list for completion
+    const list = activeDownloads.value.map(ruc => getProgress(ruc));
+    const completedCompanies = list.filter(p => p.isCompleted).length;
+    return { completedCompanies };
+});
+
+const isGlobalRunning = computed(() => {
+    if (activeDownloads.value.length === 0) return false;
+    return globalStats.value.completedCompanies < activeDownloads.value.length;
+});
+
+const currentProcessingCompany = computed(() => {
+    // Return the first non-completed company (FIFO priority usually)
+    const ruc = activeDownloads.value.find(r => !getProgress(r).isCompleted);
+    if (!ruc) return null;
+    return { ruc, ...getProgress(ruc) };
+});
+
+// --- Methods ---
 
 const fetchCompanies = async () => {
     loadingCompanies.value = true;
     try {
         const res = await api.get('/empresas/');
         companies.value = res.data || [];
+        // Optional: Auto-load active downloads if any? (Sync logic)
+        syncActiveJobs();
     } catch (e) { console.error(e); } 
     finally { loadingCompanies.value = false; }
 };
 
+const syncActiveJobs = async () => {
+    // Try to find if any job is running and add to activeDownloads
+    // Since we don't have a "get all running jobs" endpoint explicitly documented except /xml/runs?ruc=...
+    // We can iterate companies (or companies with propuesta_activa) and check /xml/progress or /xml/runs
+    // But that might be heavy. 
+    // Optimization: Check active flag or rely on user re-selecting.
+    // However, user said "el servidor ya comenzó".
+    // Let's assume user starts it. But if page refreshed, we are blind.
+    // PROPOSAL: Only logic here requested was to fix visual state locally if "server started".
+    // If I start polling anyway, I can detect progress.
+    // I will iterate 'companies' and check progress? No, too many requests.
+    // Let's rely on user selecting RUCs.
+};
+
 const allSelected = computed(() => companies.value.length > 0 && selectedRucs.value.length === companies.value.length);
-const toggleSelectAll = () => {
-    selectedRucs.value = allSelected.value ? [] : companies.value.map(c => c.ruc);
-};
+const toggleSelectAll = () => selectedRucs.value = allSelected.value ? [] : companies.value.map(c => c.ruc);
+const getCompanyName = (ruc) => companies.value.find(c => c.ruc === ruc)?.razon_social || ruc;
+const getStatusBadge = (status) => ({ 'OK': 'bg-green-900/30 text-green-400 border-green-900', 'ERROR': 'bg-red-900/30 text-red-500 border-red-900' }[status] || 'bg-gray-700 text-gray-400');
+const getFilename = (path) => path ? path.split('/').pop() : 'Desconocido';
+const getDownloadLink = (path) => `/api/files/download?path=${encodeURIComponent(path)}`;
 
-const getCompanyName = (ruc) => {
-    const c = companies.value.find(c => c.ruc === ruc);
-    return c ? c.razon_social : ruc;
-};
-
-// --- Action: Run Download ---
 const runDownload = async () => {
     processing.value = true;
-    // Activate tracking for these RUCs
-    selectedRucs.value.forEach(ruc => {
-        if (!activeDownloads.value.includes(ruc)) activeDownloads.value.push(ruc);
-    });
+    
+    // Add selected to active list
+    selectedRucs.value.forEach(ruc => { if (!activeDownloads.value.includes(ruc)) activeDownloads.value.push(ruc); });
+
+    const finalLimit = config.value.limitType === 'custom' ? config.value.limit : null;
+    const payload = {
+        periodo: config.value.periodo,
+        rucs: selectedRucs.value,
+        limit: finalLimit,
+        headless: true
+    };
 
     try {
-        await api.post('/xml/run', {
-            periodo: config.value.periodo,
-            rucs: selectedRucs.value,
-            limit: null,
-            headless: true
-        });
-        
-        // Start polling immediately if not running
-        if (!pollingInterval) startPolling();
-        
-        // Set view to first selected
-        if (selectedRucs.value.length > 0) {
-            viewEvidences(selectedRucs.value[0]);
-        }
-
+        await api.post('/xml/run', payload, { timeout: 120000 });
+        alert(`Descarga Iniciada. El backend procesará segundo plano.`);
     } catch (e) {
-        alert("Error iniciando descarga: " + e.message);
+        // If timeout or error, we still START POLLING because backend might have started.
+        if (e.code === 'ECONNABORTED' || (e.response && e.response.status === 504)) {
+             alert("La petición tardó demasiado, pero el backend sigue procesando. Iniciando monitoreo...");
+        } else {
+             console.error(e);
+             alert("Error al iniciar (posible timeout): " + e.message);
+        }
     } finally {
         processing.value = false;
+        // Always start polling after run attempt
+        if (!pollingInterval) startPolling();
+        // Set view to first
+        if (selectedRucs.value.length > 0 && !currentRuc.value) {
+            viewEvidences(selectedRucs.value[0]);
+        }
     }
 };
 
-// --- Polling Progress ---
 const startPolling = () => {
+    if (pollingInterval) return; // Already polling
     pollingInterval = setInterval(async () => {
-        if (activeDownloads.value.length === 0) {
-            clearInterval(pollingInterval);
-            pollingInterval = null;
-            return;
-        }
+        if (activeDownloads.value.length === 0) { clearInterval(pollingInterval); pollingInterval = null; return; }
 
-        // Poll each active RUC (concurrency could be improved but simple loop ok for <20 companies)
-        // Or specific endpoint for bulk status if existed. Here user specified /xml/progress?ruc=...
         for (const ruc of activeDownloads.value) {
+            const current = progressList.value[ruc];
+            if (current && current.isCompleted) continue; 
+
             try {
+                // Determine completion
+                // 1) Get progress
+                // 2) Maybe check /xml/runs for job status if progress is ambiguous
+                
                 const res = await api.get('/xml/progress', { params: { ruc, periodo: config.value.periodo } });
                 const data = res.data;
+                // data: { ruc, total_items, total_evidencias, ok, error, not_found, auth, pending, remaining, ... }
                 
-                // Calculate percentage
+                const processed = data.ok + data.not_found + data.error + data.auth;
+                
+                // Completion logic: remaining == 0 AND total_items > 0
+                // Or processed >= total_items
+                const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= data.total_items && data.total_items > 0);
+                
                 let pct = 0;
-                if (data.total_items > 0) {
-                    pct = Math.round(((data.ok + data.error + data.not_found + data.auth) / data.total_items) * 100);
-                }
-                
-                progressList.value[ruc] = { ...data, percentage: pct };
+                if (data.total_items > 0) pct = Math.round((processed / data.total_items) * 100);
 
-                // If finished? Logic is tricky since it's a stream process.
-                // We'll leave them in activeDownloads for now so user can see 100%.
-                // Maybe a manual "Clear" later or auto-remove if completed.
-                // For now, keep polling to show updates.
-
-            } catch (e) {
-                console.error(`Error polling ${ruc}`, e);
+                progressList.value[ruc] = {
+                    ...data,
+                    processedItems: processed,
+                    percentage: pct,
+                    isCompleted
+                };
+            } catch (e) { 
+                console.error(`Poll error ${ruc}`, e); 
             }
         }
-    }, 2000); // 2 seconds
+    }, 3000); 
 };
 
-// --- Evidence Explorer ---
-const viewEvidences = (ruc) => {
-    currentRuc.value = ruc;
-    loadEvidences(ruc);
+const stopAll = async () => {
+    if(!confirm("¿Detener todas las descargas?")) return;
+    try {
+        await api.post('/xml/stop', { });
+        alert("Orden de detención enviada.");
+        // We let polling reflect the stopped state eventually (or user manually refreshes)
+    } catch(e) { alert("Error: " + e.message); }
 };
 
+const viewEvidences = (ruc) => { currentRuc.value = ruc; loadEvidences(ruc); };
 const loadEvidences = async (ruc) => {
     if(!ruc) return;
     loadingEvidences.value = true;
     try {
         const res = await api.get('/xml/evidencias', { params: { ruc, periodo: config.value.periodo }});
         evidences.value = res.data;
-    } catch(e) { console.error(e); }
-    finally { loadingEvidences.value = false; }
+    } catch(e) { console.error(e); } finally { loadingEvidences.value = false; }
 };
 
-const getStatusBadge = (status) => {
-    const map = {
-        'OK': 'bg-green-900/30 text-green-400 border-green-900',
-        'ERROR': 'bg-red-900/30 text-red-500 border-red-900',
-        'NOT_FOUND': 'bg-gray-700 text-gray-400 border-gray-500',
-        'AUTH': 'bg-orange-900/30 text-orange-400 border-orange-900'
-    };
-    return map[status] || 'bg-gray-800 text-gray-500';
-};
-
-const getFilename = (path) => path ? path.split('/').pop() : 'Desconocido';
-const getDownloadLink = (path) => `/api/files/download?path=${encodeURIComponent(path)}`;
-
-// --- Details Modal ---
 const openDetail = async (id) => {
-    showModal.value = true;
-    detailData.value = null; // Clear prev
-    try {
-        const res = await api.get('/xml/detalle', { params: { item_id: id }});
-        detailData.value = res.data;
-    } catch (e) {
-        alert("Error cargando detalle: " + e.message);
-        showModal.value = false;
-    }
+    showModal.value = true; detailData.value = null;
+    try { const res = await api.get('/xml/detalle', { params: { item_id: id }}); detailData.value = res.data; }
+    catch (e) { alert(e.message); showModal.value = false; }
 };
-
 const closeModal = () => showModal.value = false;
 
-onMounted(() => {
-    fetchCompanies();
-});
-
-onUnmounted(() => {
-    if (pollingInterval) clearInterval(pollingInterval);
-});
-
+onMounted(fetchCompanies);
+onUnmounted(() => { if (pollingInterval) clearInterval(pollingInterval); });
 </script>
 
 <style scoped>
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent; 
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #475569; 
-  border-radius: 4px;
+.animate-fade-in-up { animation: fade-in-up 0.5s ease-out; }
+
+.animate-pulse-soft { animation: pulse-soft 2s infinite; }
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
 }
 </style>

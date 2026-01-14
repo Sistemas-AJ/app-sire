@@ -103,6 +103,14 @@ class XMLRunResponse(BaseModel):
     processed_rucs: List[str] = []
     errors: List[str] = []
 
+class XMLStopRequest(BaseModel):
+    ruc: Optional[str] = None
+    periodo: Optional[str] = None
+
+class XMLStopResponse(BaseModel):
+    ok: bool
+    message: str
+
 class XMLProgressResponse(BaseModel):
     ruc: str
     periodo: str
