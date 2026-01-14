@@ -35,6 +35,8 @@ class Empresa(Base):
     # Estado de la sesión guardada en JSON: 'OK', 'EXPIRED', 'ERROR'
     estado_sesion = Column(String(20), default='EXPIRED') 
     activo = Column(Boolean, default=True)
+    # Indica si tiene credenciales SIRE registradas para propuestas
+    propuesta_activa = Column(Boolean, default=False)
     ultima_revision = Column(DateTime, nullable=True)
 
     # Estado de la última ejecución del script (Fase 1)

@@ -8,6 +8,7 @@ class EmpresaBase(BaseModel):
     usuario_sol: Optional[str] = None
     clave_sol: Optional[str] = None
     activo: bool = True
+    propuesta_activa: bool = False
 
 class EmpresaCreate(EmpresaBase):
     pass

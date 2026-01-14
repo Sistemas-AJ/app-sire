@@ -56,7 +56,12 @@
                         🛑 DETENER (AL FINALIZAR EMPRESA)
                     </span>
                 </button>
-                <p v-if="isRunning" class="text-xs text-gray-500 text-center animate-pulse">El robot se detendrá tras completar la empresa actual.</p>
+                <div v-if="isRunning" class="flex flex-col items-center gap-2">
+                    <p class="text-xs text-gray-500 text-center animate-pulse">El robot se detendrá tras completar la empresa actual.</p>
+                    <button @click="forceReset" class="text-xs text-red-400 hover:text-red-300 underline mt-1">
+                        (Forzar reinicio de estado)
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -141,6 +146,7 @@ import api from '../apiConfig';
 const isRunning = ref(false);
 const runMode = ref('todo');
 const showBrowser = ref(false); // Default visible
+const manuallyStopped = ref(false); // Flag to ignore backend "running" state if forced
 // Inicializar hace 7 dias
 const getSevenDaysAgo = () => {
     const d = new Date();
@@ -164,7 +170,7 @@ const fetchStatus = async () => {
         
         // Check if running (inferido si hay procesando > 0)
         // Ojo: Esto es una simulacion simple. Idealmente el API diria "status: running".
-        if (res.data.resumen.procesando > 0) {
+        if (res.data.resumen.procesando > 0 && !manuallyStopped.value) {
             isRunning.value = true;
         } else if (isRunning.value && res.data.resumen.procesando === 0) {
             // Estaba corriendo y ya paro
@@ -186,6 +192,7 @@ const fetchErrors = async () => {
 
 const runAutomation = async () => {
     isRunning.value = true;
+    manuallyStopped.value = false; // Reset flag so we listed to API again
     
     // Calcular dias de diferencia
     const start = new Date(startDate.value);
@@ -220,6 +227,12 @@ const stopAutomation = async () => {
         console.error("Error stopping", e);
         alert("Error al intentar detener.");
     }
+};
+
+const forceReset = () => {
+    if(!confirm("¿Forzar reinicio del estado visual? Esto no detiene el backend, solo resetea el botón.")) return;
+    isRunning.value = false;
+    manuallyStopped.value = true; // Prevent polling from re-enabling it
 };
 
 onMounted(() => {

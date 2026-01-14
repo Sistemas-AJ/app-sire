@@ -59,10 +59,10 @@
                 <div class="col-span-2 flex items-center">
                     <div 
                         class="w-3 h-3 rounded-full mr-2"
-                        :class="company.has_sire ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'"
-                        :title="company.has_sire ? 'SIRE Configurado' : 'Sin credenciales SIRE'"
+                        :class="company.propuesta_activa ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'"
+                        :title="company.propuesta_activa ? 'SIRE Configurado' : 'Sin credenciales SIRE'"
                     ></div>
-                    <span class="text-xs text-secondary hidden xl:inline">{{ company.has_sire ? 'Activo' : 'Inactivo' }}</span>
+                    <span class="text-xs text-secondary hidden xl:inline">{{ company.propuesta_activa ? 'Activo' : 'Inactivo' }}</span>
                 </div>
 
                 <div class="col-span-2">
@@ -285,18 +285,16 @@ const updateCompany = async () => {
 const updateSireCredentials = async () => {
     if (!form.value.ruc) return;
     try {
-        // POST /empresas/{ruc}/credenciales
-        // Body needs: usuario_sol, clave_sol, sire_client_id, sire_client_secret, activo
-        // Note: The endpoint seems to require re-sending SOL credentials too according to user request,
-        // or maybe it's using them to validate? We will send what we have in the form.
-        await api.post(`/empresas/${form.value.ruc}/credenciales`, {
+        // PATCH /empresas/{ruc}/sire
+        // Body: usuario_sol, clave_sol, sire_client_id, sire_client_secret, activo
+        await api.patch(`/empresas/${form.value.ruc}/sire`, {
             usuario_sol: form.value.usuario_sol,
             clave_sol: form.value.clave_sol,
             sire_client_id: sireForm.value.sire_client_id,
             sire_client_secret: sireForm.value.sire_client_secret,
             activo: true
         });
-        fetchCompanies(); // Refresh to update "has_sire" status
+        fetchCompanies(); // Refresh to update "propuesta_activa" status
         alert("Credenciales SIRE guardadas exitosamente y validadas.");
     } catch (e) {
         alert("Error guardando credenciales SIRE: " + (e.response?.data?.detail || e.message));

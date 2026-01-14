@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.database import init_db
+from core.config import init_dirs
 from api.routers import empresas, automatizacion, dashboard, files, propuesta, xml_service
 
 app = FastAPI(title="SUNAT Automation API de Buzones SOL", version="1.0.0")
@@ -18,6 +19,7 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     init_db() # Crea tablas si no existen
+    init_dirs()
 
 # Routers
 app.include_router(empresas.router)

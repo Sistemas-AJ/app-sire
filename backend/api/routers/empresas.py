@@ -5,7 +5,17 @@ import csv
 import io
 import codecs
 
-from core.database import get_db, Empresa, EmpresaSire
+from core.database import (
+    get_db,
+    Empresa,
+    EmpresaSire,
+    Notificacion,
+    RCERun,
+    RCEPropuestaFile,
+    RCEPropuestaItem,
+    CPEEvidencia,
+    CPEDetalle,
+)
 from api import schemas
 
 router = APIRouter(
@@ -54,9 +64,17 @@ def eliminar_empresa(ruc: str, db: Session = Depends(get_db)):
     if not emp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
 
-    sire = db.query(EmpresaSire).filter(EmpresaSire.ruc_empresa == ruc).first()
-    if sire:
-        db.delete(sire)
+    db.query(CPEDetalle).join(
+        RCEPropuestaItem, CPEDetalle.propuesta_item_id == RCEPropuestaItem.id
+    ).filter(RCEPropuestaItem.ruc_empresa == ruc).delete(synchronize_session=False)
+    db.query(CPEEvidencia).join(
+        RCEPropuestaItem, CPEEvidencia.propuesta_item_id == RCEPropuestaItem.id
+    ).filter(RCEPropuestaItem.ruc_empresa == ruc).delete(synchronize_session=False)
+    db.query(RCEPropuestaItem).filter(RCEPropuestaItem.ruc_empresa == ruc).delete(synchronize_session=False)
+    db.query(RCEPropuestaFile).filter(RCEPropuestaFile.ruc_empresa == ruc).delete(synchronize_session=False)
+    db.query(RCERun).filter(RCERun.ruc_empresa == ruc).delete(synchronize_session=False)
+    db.query(Notificacion).filter(Notificacion.ruc_empresa == ruc).delete(synchronize_session=False)
+    db.query(EmpresaSire).filter(EmpresaSire.ruc_empresa == ruc).delete(synchronize_session=False)
 
     db.delete(emp)
     db.commit()
@@ -101,6 +119,7 @@ def set_credenciales(ruc: str, payload: schemas.EmpresaCredencialesRequest, db: 
             sire.client_id = payload.sire_client_id
             sire.client_secret = payload.sire_client_secret
             sire.username = username
+        emp.propuesta_activa = True
 
     db.commit()
     return schemas.EmpresaCredencialesResponse(
@@ -109,6 +128,14 @@ def set_credenciales(ruc: str, payload: schemas.EmpresaCredencialesRequest, db: 
         has_sol=bool(emp.usuario_sol and emp.clave_sol),
         has_sire=bool(db.query(EmpresaSire).filter(EmpresaSire.ruc_empresa == ruc).first()),
     )
+
+
+@router.patch("/{ruc}/sire", response_model=schemas.EmpresaCredencialesResponse)
+def update_sire_creds(ruc: str, payload: schemas.EmpresaCredencialesRequest, db: Session = Depends(get_db)):
+    """
+    Actualiza credenciales SIRE y/o SOL en un solo endpoint.
+    """
+    return set_credenciales(ruc, payload, db)
 
 @router.post("/import")
 async def importar_empresas(file: UploadFile = File(...), db: Session = Depends(get_db)):
