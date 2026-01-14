@@ -1,20 +1,39 @@
 import { createRouter, createWebHistory } from 'vue-router'
-
-// Lazy load views
-const Dashboard = () => import('../views/Dashboard.vue')
-const Companies = () => import('../views/Companies.vue')
-const Automation = () => import('../views/Automation.vue')
+import Dashboard from '../views/Dashboard.vue'
+import Companies from '../views/Companies.vue'
+import Automation from '../views/Automation.vue'
+import Welcome from '../views/Welcome.vue'
 
 const routes = [
-    { path: '/', redirect: '/dashboard' },
-    { path: '/dashboard', component: Dashboard, name: 'Dashboard' },
-    { path: '/empresas', component: Companies, name: 'Empresas' },
-    { path: '/automatizacion', component: Automation, name: 'Automatizacion' },
+    {
+        path: '/',
+        redirect: '/dashboard' // Could be welcome depending on auth state
+    },
+    {
+        path: '/welcome',
+        name: 'Welcome',
+        component: Welcome
+    },
+    {
+        path: '/dashboard',
+        name: 'Dashboard',
+        component: Dashboard
+    },
+    {
+        path: '/empresas',
+        name: 'Companies',
+        component: Companies
+    },
+    {
+        path: '/automatizacion',
+        name: 'Automation',
+        component: Automation
+    }
 ]
 
 const router = createRouter({
     history: createWebHistory(),
-    routes,
+    routes
 })
 
 export default router

@@ -34,7 +34,7 @@ def run_propuesta(req: schemas.PropuestaRunRequest):
         for emp, cred in pairs:
             try:
                 res = procesar_empresa(db, emp, cred, req.periodo, req.fec_ini, req.fec_fin)
-                results.append(schemas.PropuestaRunItem(**res))
+                results.append(schemas.PropuestaRunItem(periodo=req.periodo, **res))
             except Exception as e:
                 errors.append(f"{emp.ruc}: {e}")
 

@@ -1,7 +1,7 @@
 import os, zipfile, hashlib
 import pandas as pd
 
-REGISTROS_DIR = "/app/registros"
+from .config import REGISTROS_DIR
 
 def ensure_dirs(periodo: str, ruc: str) -> str:
     base = os.path.join(REGISTROS_DIR, "periodos", periodo, ruc)
