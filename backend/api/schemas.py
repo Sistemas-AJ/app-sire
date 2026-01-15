@@ -168,6 +168,13 @@ class XMLReportResponse(BaseModel):
     pending: int
     items: List[XMLReportItemResponse]
 
+class XMLReportExportResponse(BaseModel):
+    ruc: str
+    periodo: str
+    path: str
+    rows: int
+    message: str
+
 class XMLRunStatusResponse(BaseModel):
     id: int
     ruc_empresa: str

@@ -134,9 +134,17 @@
 
         <!-- Pagination -->
         <div class="p-4 border-t border-gray-800 flex justify-between items-center bg-dark/50 rounded-b-xl">
-            <span class="text-xs text-gray-500">
-                Mostrando {{ items.length }} de {{ pagination.total }} registros
-            </span>
+            <div class="flex items-center gap-4">
+                <span class="text-xs text-gray-500">
+                    Mostrando {{ items.length }} de {{ pagination.total }} registros
+                </span>
+                
+                <button v-if="canExportReport" @click="downloadReport" :disabled="isDownloadingReport" class="flex items-center gap-2 bg-green-900/30 hover:bg-green-900/50 text-green-400 border border-green-900 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-wait">
+                    <span v-if="isDownloadingReport" class="animate-spin h-3 w-3 border-2 border-green-500 border-t-transparent rounded-full"></span>
+                    <span v-else>📊</span>
+                    Descargar Excel Consolidado
+                </button>
+            </div>
             <div class="flex items-center gap-2">
                 <button @click="changePage(pagination.page - 1)" :disabled="pagination.page <= 1" class="p-2 rounded-lg bg-dark border border-gray-700 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-400">
                     ◀️
@@ -353,6 +361,34 @@ const openDetail = async (id) => {
     }
 };
 const closeModal = () => showModal.value = false;
+
+// Export Report Logic
+const isDownloadingReport = ref(false);
+const canExportReport = computed(() => {
+    return filters.periodo && filters.ruc_empresa && filters.status === 'OK';
+});
+
+const downloadReport = async () => {
+    if (!canExportReport.value) return;
+    isDownloadingReport.value = true;
+    try {
+        const res = await api.get('/xml/report/export', { 
+            params: { ruc: filters.ruc_empresa, periodo: filters.periodo } 
+        });
+        
+        if (res.data.path) {
+            const url = getDownloadLink(res.data.path);
+            window.open(url, '_blank');
+        } else {
+            alert("No se pudo generar el reporte.");
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Error al exportar: " + (e.response?.data?.detail || e.message));
+    } finally {
+        isDownloadingReport.value = false;
+    }
+};
 
 onMounted(async () => {
     await fetchCompanies();

@@ -129,7 +129,7 @@
                         </h3>
                         <p class="text-xs text-gray-400 mt-1">Empresas Completadas: <span class="text-white font-bold">{{ globalStats.completedCompanies }} / {{ activeDownloads.length }}</span></p>
                     </div>
-                    <button @click="stopAll" class="bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900 px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                    <button v-if="isGlobalRunning" @click="stopAll" class="bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900 px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
                         🛑 Detener Todo
                     </button>
                 </div>
@@ -162,13 +162,13 @@
                         :class="{'border-green-500/50 bg-green-900/10': getProgress(ruc).isCompleted}">
                         
                         <div class="flex justify-between items-start mb-2 relative z-10">
-                             <div class="min-w-0">
+                             <div class="min-w-0 pr-2">
                                 <h4 class="text-gray-300 font-bold text-xs truncate">{{ getCompanyName(ruc) }}</h4>
                                 <span class="text-[10px] text-gray-500 font-mono">{{ ruc }}</span>
                             </div>
                             <!-- Status Badge -->
-                            <span v-if="getProgress(ruc).isCompleted" class="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded border border-green-800 shadow-sm shadow-green-900/20">COMPLETADO</span>
-                            <span v-else class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded">{{ getProgress(ruc).percentage }}%</span>
+                            <span v-if="getProgress(ruc).isCompleted" class="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded border border-green-800 shadow-sm shadow-green-900/20 whitespace-nowrap">COMPLETADO</span>
+                            <span v-else class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded whitespace-nowrap">{{ getProgress(ruc).percentage }}%</span>
                         </div>
 
                         <!-- Mini Bar -->
@@ -176,16 +176,23 @@
                             <div class="bg-primary h-full transition-all duration-500" :style="{ width: getProgress(ruc).percentage + '%' }"></div>
                         </div>
 
-                        <div class="text-[10px] text-gray-500 flex justify-between relative z-10">
-                             <span>{{ getProgress(ruc).processedItems }}/{{ getProgress(ruc).total_items }}</span>
-                             <span class="space-x-1">
+                        <div class="text-[10px] text-gray-500 flex flex-col gap-0.5 relative z-10">
+                             <div class="flex justify-between font-mono">
+                                 <!-- Counter Logic: Processed / Limit (if custom) else Total -->
+                                 <span v-if="config.limitType === 'custom'" class="text-gray-300">
+                                     <span class="text-white font-bold">{{ getProgress(ruc).processedItems }}</span> / {{ config.limit }}
+                                     <span class="text-gray-600 text-[9px] ml-1">(Total: {{ getProgress(ruc).real_total || getProgress(ruc).total_items }})</span>
+                                 </span>
+                                 <span v-else>
+                                     <span class="text-white font-bold">{{ getProgress(ruc).processedItems }}</span> / {{ getProgress(ruc).total_items }}
+                                 </span>
+                             </div>
+                             
+                             <div class="flex justify-end space-x-2">
                                  <span v-if="getProgress(ruc).ok > 0" class="text-green-500">{{ getProgress(ruc).ok }} OK</span>
                                  <span v-if="getProgress(ruc).error > 0" class="text-red-500">{{ getProgress(ruc).error }} ERR</span>
-                             </span>
+                             </div>
                         </div>
-                        
-                        <!-- Pulse effect if running -->
-                         <!-- <div v-if="!getProgress(ruc).isCompleted" class="absolute inset-0 bg-primary/5 animate-pulse pointer-events-none"></div> -->
                     </div>
                 </div>
              </div>
@@ -206,9 +213,16 @@
                             </h3>
                             <span class="text-xs text-primary font-mono bg-primary/10 px-2 py-0.5 rounded">{{ currentRuc }} - {{ config.periodo }}</span>
                         </div>
-                        <button @click="loadEvidences(currentRuc)" class="p-2 hover:bg-gray-800 rounded-lg text-primary transition-colors" title="Recargar">
-                             🔄 Refresh
-                        </button>
+                        <div class="flex gap-2">
+                            <button @click="downloadReport" :disabled="isDownloadingReport" class="flex items-center gap-1 p-2 hover:bg-gray-800 rounded-lg text-green-400 transition-colors border border-transparent hover:border-gray-700" title="Descargar Reporte Excel">
+                                <span v-if="isDownloadingReport" class="animate-spin h-3 w-3 border-2 border-green-500 border-t-transparent rounded-full"></span>
+                                <span v-else>📊</span>
+                                <span class="text-xs font-bold">Excel</span>
+                            </button>
+                            <button @click="loadEvidences(currentRuc)" class="p-2 hover:bg-gray-800 rounded-lg text-primary transition-colors border border-transparent hover:border-gray-700" title="Recargar">
+                                 🔄 Refresh
+                            </button>
+                        </div>
                     </div>
 
                     <div class="flex-1 overflow-y-auto custom-scrollbar border border-dark-border rounded-lg bg-dark/30">
@@ -381,6 +395,8 @@ const saveSession = () => {
         const state = {
             activeDownloads: activeDownloads.value,
             periodo: config.value.periodo,
+            limit: config.value.limit,
+            limitType: config.value.limitType,
             timestamp: Date.now()
         };
         localStorage.setItem(SESSION_KEY, JSON.stringify(state));
@@ -400,6 +416,9 @@ const recoverSession = () => {
                     console.log("Recovering active session...");
                     activeDownloads.value = state.activeDownloads;
                     if(state.periodo) config.value.periodo = state.periodo;
+                    if(state.limit) config.value.limit = state.limit;
+                    if(state.limitType) config.value.limitType = state.limitType;
+                    
                     startPolling();
                     // Auto-view first if running
                     if(!currentRuc.value && activeDownloads.value.length > 0) {
@@ -519,14 +538,22 @@ const startPolling = () => {
                 const res = await api.get('/xml/progress', { params: { ruc, periodo: config.value.periodo } });
                 const data = res.data;
                 const processed = data.ok + data.not_found + data.error + data.auth;
-                const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= data.total_items && data.total_items > 0);
+                
+                // Determine completion target based on limit
+                const limit = config.value.limitType === 'custom' ? config.value.limit : Infinity;
+                const effectiveTotal = (data.total_items > 0 && limit < data.total_items) ? limit : data.total_items;
+
+                const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= effectiveTotal && effectiveTotal > 0) || (data.status === 'COMPLETED');
                 
                 let pct = 0;
-                if (data.total_items > 0) pct = Math.round((processed / data.total_items) * 100);
+                if (effectiveTotal > 0) pct = Math.round((processed / effectiveTotal) * 100);
+                if (pct > 100) pct = 100;
 
                 progressList.value[ruc] = {
                     ...data,
                     processedItems: processed,
+                    total_items: effectiveTotal, // This is the TARGET for the progress bar
+                    real_total: data.total_items, // This is the actual proposal size
                     percentage: pct,
                     isCompleted
                 };
@@ -571,6 +598,32 @@ const loadEvidences = async (ruc) => {
         const res = await api.get('/xml/evidencias', { params: { ruc, periodo: config.value.periodo }});
         evidences.value = res.data;
     } catch(e) { console.error(e); } finally { loadingEvidences.value = false; }
+};
+
+// Report Export
+const isDownloadingReport = ref(false);
+const downloadReport = async () => {
+    if(!currentRuc.value) return;
+    isDownloadingReport.value = true;
+    try {
+        const res = await api.get('/xml/report/export', { 
+            params: { ruc: currentRuc.value, periodo: config.value.periodo } 
+        });
+        
+        if (res.data.path) {
+            // Use existing helper or direct window open
+            const url = getDownloadLink(res.data.path);
+            window.open(url, '_blank');
+            // Optional: alert(res.data.message); 
+        } else {
+            alert("No se pudo generar el reporte.");
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Error al exportar: " + (e.response?.data?.detail || e.message));
+    } finally {
+        isDownloadingReport.value = false;
+    }
 };
 
 const openDetail = async (id) => {

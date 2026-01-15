@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from decimal import Decimal, InvalidOperation
 from typing import Dict, Any, List, Optional
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,15 @@ def _text(elem: Optional[ET.Element]) -> Optional[str]:
         return None
     t = elem.text.strip()
     return t if t else None
+
+
+def _dec(val: Optional[str]) -> Optional[str]:
+    if val is None:
+        return None
+    try:
+        return str(Decimal(val))
+    except InvalidOperation:
+        return val
 
 
 def _find_first(root: ET.Element, path: str) -> Optional[ET.Element]:
@@ -45,14 +55,33 @@ def parse_detalle(xml_path: str) -> Dict[str, Any]:
         qty = _text(_find_first(ln, ".//{*}InvoicedQuantity")) or _text(
             _find_first(ln, ".//{*}CreditedQuantity")
         ) or _text(_find_first(ln, ".//{*}DebitedQuantity"))
-        price = _text(_find_first(ln, ".//{*}PriceAmount"))
-        line_total = _text(_find_first(ln, ".//{*}LineExtensionAmount"))
+        unit_value = _text(_find_first(ln, ".//{*}Price/{*}PriceAmount"))
+        line_net = _text(_find_first(ln, "./{*}LineExtensionAmount"))
+        line_igv = _text(_find_first(ln, "./{*}TaxTotal/{*}TaxAmount"))
+
+        unit_price_igv = None
+        for alt in ln.findall(".//{*}PricingReference/{*}AlternativeConditionPrice"):
+            code = _text(alt.find("./{*}PriceTypeCode"))
+            if code == "01":
+                unit_price_igv = _text(alt.find("./{*}PriceAmount"))
+                break
+
+        total_line = None
+        if line_net and line_igv:
+            try:
+                total_line = str(Decimal(line_net) + Decimal(line_igv))
+            except InvalidOperation:
+                total_line = None
+
         lines.append(
             {
                 "description": desc,
-                "quantity": qty,
-                "price": price,
-                "line_total": line_total,
+                "quantity": _dec(qty),
+                "unit_value": _dec(unit_value),
+                "unit_price_igv": _dec(unit_price_igv),
+                "line_net": _dec(line_net),
+                "line_igv": _dec(line_igv),
+                "line_total": _dec(total_line),
             }
         )
 
