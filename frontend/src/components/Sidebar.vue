@@ -39,13 +39,13 @@
         <!-- Submenu Buzones -->
         <div v-show="activeGroup === 'buzones'" class="pl-4 space-y-1">
           <router-link to="/dashboard" custom v-slot="{ href, navigate, isActive }">
-            <a :href="href" @click="handleNav(navigate)" 
+            <a :href="href" @click.prevent="handleNav(navigate)" 
                :class="['flex items-center px-4 py-2 rounded-lg text-sm transition-colors', isActive ? 'bg-primary/20 text-primary' : 'text-gray-500 hover:text-gray-300']">
               Dashboard
             </a>
           </router-link>
           <router-link to="/automatizacion" custom v-slot="{ href, navigate, isActive }">
-            <a :href="href" @click="handleNav(navigate)" 
+            <a :href="href" @click.prevent="handleNav(navigate)" 
                :class="['flex items-center px-4 py-2 rounded-lg text-sm transition-colors', isActive ? 'bg-primary/20 text-primary' : 'text-gray-500 hover:text-gray-300']">
               Automatización
             </a>
@@ -55,7 +55,7 @@
 
       <!-- Single Item: Empresas -->
       <router-link to="/empresas" custom v-slot="{ href, navigate, isActive }">
-        <a :href="href" @click="handleNav(navigate)" 
+        <a :href="href" @click.prevent="handleNav(navigate)" 
            :class="['flex items-center px-4 py-3 rounded-lg transition-colors duration-200', isActive ? 'bg-primary/20 text-primary' : 'hover:bg-dark-border/50 text-text-muted hover:text-white']">
           <span class="mr-3">🏢</span>
           <span class="font-medium">Empresas</span>
@@ -81,19 +81,19 @@
         <!-- Submenu Comprobantes -->
         <div v-show="activeGroup === 'comprobantes'" class="pl-4 space-y-1">
           <router-link to="/comprobantes/propuesta" custom v-slot="{ href, navigate, isActive }">
-            <a :href="href" @click="handleNav(navigate)" 
+            <a :href="href" @click.prevent="handleNav(navigate)" 
                :class="['flex items-center px-4 py-2 rounded-lg text-sm transition-colors', isActive ? 'bg-primary/20 text-primary' : 'text-gray-500 hover:text-gray-300']">
               Propuesta
             </a>
           </router-link>
           <router-link to="/comprobantes/descarga" custom v-slot="{ href, navigate, isActive }">
-            <a :href="href" @click="handleNav(navigate)" 
+            <a :href="href" @click.prevent="handleNav(navigate)" 
                :class="['flex items-center px-4 py-2 rounded-lg text-sm transition-colors', isActive ? 'bg-primary/20 text-primary' : 'text-gray-500 hover:text-gray-300']">
               Descarga CPE
             </a>
           </router-link>
           <router-link to="/comprobantes/repositorio" custom v-slot="{ href, navigate, isActive }">
-            <a :href="href" @click="handleNav(navigate)" 
+            <a :href="href" @click.prevent="handleNav(navigate)" 
                :class="['flex items-center px-4 py-2 rounded-lg text-sm transition-colors', isActive ? 'bg-primary/20 text-primary' : 'text-gray-500 hover:text-gray-300']">
               Repositorio
             </a>
@@ -127,7 +127,7 @@ defineProps({
   }
 });
 
-defineEmits(['close']);
+const emit = defineEmits(['close']);
 
 const activeGroup = ref('buzones'); // Default open group
 

@@ -15,6 +15,13 @@ def sha256_bytes(data: bytes) -> str:
 
 def save_zip_and_extract_csv(zip_bytes: bytes, out_dir: str, periodo: str) -> str:
     # Sobrescribir siempre por periodo (no acumular archivos)
+    for name in os.listdir(out_dir):
+        if name.endswith("-propuesta.csv") or name.endswith("-propuesta.zip"):
+            try:
+                os.remove(os.path.join(out_dir, name))
+            except Exception:
+                pass
+
     zip_path = os.path.join(out_dir, f"propuesta_{periodo}.zip")
     with open(zip_path, "wb") as f:
         f.write(zip_bytes)

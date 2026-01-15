@@ -14,9 +14,9 @@
       <main class="flex-1 overflow-auto bg-dark p-0 relative w-full">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <div class="h-full w-full"> 
+            <keep-alive>
                <component :is="Component" />
-            </div>
+            </keep-alive>
           </transition>
         </router-view>
       </main>

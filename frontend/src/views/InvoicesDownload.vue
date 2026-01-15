@@ -222,8 +222,8 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-dark-border">
-                                <tr v-for="item in evidences" :key="item.propuesta_item_id" class="hover:bg-dark-border/30 transition-colors">
-                                    <td class="px-4 py-3 font-mono text-xs">{{ item.propuesta_item_id }}</td>
+                                <tr v-for="(item, index) in evidences" :key="item.propuesta_item_id" class="hover:bg-dark-border/30 transition-colors">
+                                    <td class="px-4 py-3 font-mono text-xs">{{ index + 1 }}</td>
                                     <td class="px-4 py-3"><div class="text-white truncate max-w-[200px]" :title="item.storage_path">{{ getFilename(item.storage_path) }}</div></td>
                                     <td class="px-4 py-3"><span :class="getStatusBadge(item.status)" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border">{{ item.status }}</span></td>
                                     <td class="px-4 py-3 text-right space-x-2">
@@ -373,43 +373,44 @@ const currentProcessingCompany = computed(() => {
 
 // --- Methods ---
 
-const saveState = () => {
-    const state = {
-        periodo: config.value.periodo,
-        selectedRucs: selectedRucs.value, // Persist selection to restore UI
-        activeDownloads: activeDownloads.value,
-        timestamp: Date.now()
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+const SESSION_KEY = 'xml_active_session';
+
+const saveSession = () => {
+    // Only save if there are active downloads
+    if (activeDownloads.value.length > 0) {
+        const state = {
+            activeDownloads: activeDownloads.value,
+            periodo: config.value.periodo,
+            timestamp: Date.now()
+        };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(state));
+    } else {
+        localStorage.removeItem(SESSION_KEY);
+    }
 };
 
-const clearState = () => {
-    localStorage.removeItem(STORAGE_KEY);
-};
-
-const restoreState = () => {
+const recoverSession = () => {
     try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = localStorage.getItem(SESSION_KEY);
         if (stored) {
             const state = JSON.parse(stored);
-            // Check expiry (e.g. 24h)
+            // Valid for 24h
             if (Date.now() - state.timestamp < 24 * 60 * 60 * 1000) {
-                config.value.periodo = state.periodo || config.value.periodo;
-                selectedRucs.value = state.selectedRucs || [];
-                activeDownloads.value = state.activeDownloads || [];
-                
-                if (activeDownloads.value.length > 0) {
-                    console.log("Restoring active downloads session...", activeDownloads.value);
+                if (state.activeDownloads && state.activeDownloads.length > 0) {
+                    console.log("Recovering active session...");
+                    activeDownloads.value = state.activeDownloads;
+                    if(state.periodo) config.value.periodo = state.periodo;
                     startPolling();
+                    // Auto-view first if running
+                    if(!currentRuc.value && activeDownloads.value.length > 0) {
+                         viewEvidences(activeDownloads.value[0]);
+                    }
                 }
             } else {
-                clearState();
+                localStorage.removeItem(SESSION_KEY);
             }
         }
-    } catch (e) {
-        console.warn("Error restoring state", e);
-        clearState();
-    }
+    } catch (e) { console.error(e); }
 };
 
 const fetchCompanies = async () => {
@@ -466,8 +467,13 @@ const runDownload = async () => {
     
     selectedRucs.value.forEach(ruc => { if (!activeDownloads.value.includes(ruc)) activeDownloads.value.push(ruc); });
 
-    // Save State immediately before run
-    saveState();
+    // Immediate Feedback: Show details for first selected company
+    if (selectedRucs.value.length > 0 && !currentRuc.value) {
+        viewEvidences(selectedRucs.value[0]);
+    }
+
+    // Save Session (active downloads only)
+    saveSession();
 
     const finalLimit = config.value.limitType === 'custom' ? config.value.limit : null;
     const payload = {
@@ -487,9 +493,6 @@ const runDownload = async () => {
     } finally {
         processing.value = false;
         if (!pollingInterval) startPolling();
-        if (selectedRucs.value.length > 0 && !currentRuc.value) {
-            viewEvidences(selectedRucs.value[0]);
-        }
     }
 };
 
@@ -542,7 +545,7 @@ const startPolling = () => {
             // clearState(); // Optional: Clear when ALL done? Or keep history?
             // Better to keep it until they start a new one or "Clear" it.
         } else {
-            saveState(); // Update state (active downloads list might haven't changed, but maybe we want to save progress? No need, progress is fetched)
+            saveSession(); 
         }
     };
 
@@ -554,8 +557,8 @@ const stopAll = async () => {
     if(!confirm("¿Detener todas las descargas?")) return;
     try {
         await api.post('/xml/stop', { });
-        clearState(); // Clear persistence
         activeDownloads.value = []; // Clear frontend active tracking
+        saveSession(); // Updates storage (clears it)
         alert("Orden de detención enviada.");
     } catch(e) { alert("Error: " + e.message); }
 };
@@ -589,8 +592,9 @@ const closeModal = () => showModal.value = false;
 
 onMounted(async () => {
     await fetchCompanies(); 
-    await fetchPeriods(); // Load periods and trigger availability check via watch or default
-    restoreState();
+    await fetchPeriods(); 
+    await fetchPeriods(); 
+    recoverSession();
 });
 onUnmounted(() => { if (pollingInterval) clearInterval(pollingInterval); });
 </script>

@@ -40,6 +40,8 @@ def run_xml_job_for_empresa_periodo(
     headless: bool = False,
 ):
     run_id = None
+    # Nuevo run: limpiar stops previos para esta empresa/periodo
+    _STOP_REQUESTED.discard((None, None))
     _STOP_REQUESTED.discard((ruc_empresa, periodo))
     _STOP_REQUESTED.discard((ruc_empresa, None))
     with db_session() as db:

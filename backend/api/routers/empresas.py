@@ -64,12 +64,13 @@ def eliminar_empresa(ruc: str, db: Session = Depends(get_db)):
     if not emp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
 
-    db.query(CPEDetalle).join(
-        RCEPropuestaItem, CPEDetalle.propuesta_item_id == RCEPropuestaItem.id
-    ).filter(RCEPropuestaItem.ruc_empresa == ruc).delete(synchronize_session=False)
-    db.query(CPEEvidencia).join(
-        RCEPropuestaItem, CPEEvidencia.propuesta_item_id == RCEPropuestaItem.id
-    ).filter(RCEPropuestaItem.ruc_empresa == ruc).delete(synchronize_session=False)
+    item_ids = [
+        r[0]
+        for r in db.query(RCEPropuestaItem.id).filter(RCEPropuestaItem.ruc_empresa == ruc).all()
+    ]
+    if item_ids:
+        db.query(CPEDetalle).filter(CPEDetalle.propuesta_item_id.in_(item_ids)).delete(synchronize_session=False)
+        db.query(CPEEvidencia).filter(CPEEvidencia.propuesta_item_id.in_(item_ids)).delete(synchronize_session=False)
     db.query(RCEPropuestaItem).filter(RCEPropuestaItem.ruc_empresa == ruc).delete(synchronize_session=False)
     db.query(RCEPropuestaFile).filter(RCEPropuestaFile.ruc_empresa == ruc).delete(synchronize_session=False)
     db.query(RCERun).filter(RCERun.ruc_empresa == ruc).delete(synchronize_session=False)
