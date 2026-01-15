@@ -168,13 +168,17 @@ const fetchStatus = async () => {
         const res = await api.get('/automatizacion/status');
         statusData.value = res.data;
         
-        // Check if running (inferido si hay procesando > 0)
-        // Ojo: Esto es una simulacion simple. Idealmente el API diria "status: running".
-        if (res.data.resumen.procesando > 0 && !manuallyStopped.value) {
+        // Check if running (Any processing OR pending items)
+        const { procesando, pendientes } = res.data.resumen;
+        
+        if ((procesando > 0 || pendientes > 0) && !manuallyStopped.value) {
             isRunning.value = true;
-        } else if (isRunning.value && res.data.resumen.procesando === 0) {
-            // Estaba corriendo y ya paro
+        } else if (isRunning.value && procesando === 0 && pendientes === 0) {
+            // Finished naturally
             isRunning.value = false;
+            // Optional: alert("Proceso Terminado");
+        } else if (manuallyStopped.value) {
+             isRunning.value = false;
         }
     } catch (e) {
         console.error("Error fetching status", e);
