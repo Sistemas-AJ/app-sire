@@ -528,52 +528,45 @@ const startPolling = () => {
     // Immediate poll check
     const pollFn = async () => {
         try {
-            // Priority: Check Global Job Status
+            // Source of Truth: Get ALL runs
             const runRes = await api.get('/xml/runs');
-            // Assuming endpoint returns the job object or list. If list, take last? 
-            // User said: "/xml/runs (estado global del job...)" implies single object or we scan for active. 
-            // "El worker reintenta... un nuevo run retoma".
-            // Let's assume it returns { status: 'RUNNING', ... } or a list. 
-            // I'll check if response has 'status'. If it's a list, I'll look for the most relevant one.
-            // CAUTION: If user didn't specify format, I'll log it first to be safe or assume standard object if implied.
-            // Given context "GET /xml/runs (estado global...)", I'll assume object.
+            const data = runRes.data || [];
             
-            const jobData = runRes.data;
-            jobStatus.value = jobData.status || 'UNKNOWN'; // PENDING, RUNNING, PARTIAL, ERROR, OK, STOPPED
-            
-            // Handle State Logic
-            if (activeDownloads.value.length === 0 && jobStatus.value !== 'RUNNING' && jobStatus.value !== 'PENDING') {
-                 // Nothing locally tracked and backend not running -> Stop polling?
-                 // But we might be in "STOPPED" state waiting for resume.
-                 // We keep polling if we have activeDownloads locally OR backend is active.
-                 // Actually, if backend says STOPPED, we should show that state.
-            }
-            
-            if (['OK', 'PARTIAL', 'ERROR', 'STOPPED'].includes(jobStatus.value)) {
-                 // Job finished/stopped.
-                 // Should we stop polling eventually?
-                 // Maybe slow down polling?
-                 // For now, keep polling but slower?
+            // If response is strict empty array, clear everything
+            if (Array.isArray(data)) {
+                 // Map active runs to our list
+                 // The backend returns details for these runs, so we can also check status
+                 const backendRucs = data.map(r => r.ruc_empresa);
+                 
+                 // Sync activeDownloads
+                 activeDownloads.value = backendRucs;
+
+                 // Determine Global Status
+                 if (data.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
+                 else if (data.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
+                 else if (data.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
+                 else if (data.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
+                 else if (data.length > 0 && data.every(r => ['OK', 'STOPPED'].includes(r.status))) jobStatus.value = 'OK'; // or STOPPED
+                 else jobStatus.value = 'STOPPED'; // Default if list exists but no active?
+
+                 // Use STOPPED if any are stopped and none running/pending?
+                 const anyRunning = data.some(r => ['RUNNING', 'PENDING'].includes(r.status));
+                 if (!anyRunning && data.some(r => r.status === 'STOPPED')) jobStatus.value = 'STOPPED';
+                 
+                 // Special Case: Empty List -> IDLE/UNKNOWN
+                 if (data.length === 0) jobStatus.value = 'UNKNOWN';
+
+            } else {
+                 console.warn("Unexpected runs format", data);
+                 // Fallback? Or clear?
+                 activeDownloads.value = [];
             }
 
         } catch(e) { console.error("Error checking runs", e); }
 
-        if (activeDownloads.value.length === 0) { 
-            // If nothing tracked locally AND backend not running, maybe stop?
-            // But we want to see the status.
-            if (!['PENDING', 'RUNNING'].includes(jobStatus.value)) {
-                clearInterval(pollingInterval); pollingInterval = null; return; 
-            }
-        }
-
-        // Poll Progress for individual companies
-        // We only poll if we have `activeDownloads` populated
+        // Poll Progress for individual companies (Only what's in activeDownloads)
+        // We still fetch detailed progress because runs might not have 'total_items' or real-time 'remaining' in the main list yet
         for (const ruc of activeDownloads.value) {
-            const current = progressList.value[ruc];
-            if (current && current.isCompleted && jobStatus.value !== 'RUNNING') continue; 
-            // If global is running, even if local says completed, maybe it re-runs? (User said "Scraping occurs in worker").
-            // User: "El worker reintenta...". So completion might revert? Unlikely for OK items.
-            
             try {
                 const res = await api.get('/xml/progress', { params: { ruc, periodo: config.value.periodo } });
                 const data = res.data;
@@ -582,9 +575,7 @@ const startPolling = () => {
                 const limit = config.value.limitType === 'custom' ? config.value.limit : Infinity;
                 const effectiveTotal = (data.total_items > 0 && limit < data.total_items) ? limit : data.total_items;
 
-                // Update completion logic with global status awareness
-                // If global is OK, everything is done.
-                const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= effectiveTotal && effectiveTotal > 0) || (data.status === 'COMPLETED') || (jobStatus.value === 'OK');
+                const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= effectiveTotal && effectiveTotal > 0) || (data.status === 'COMPLETED');
                 
                 let pct = 0;
                 if (effectiveTotal > 0) pct = Math.round((processed / effectiveTotal) * 100);

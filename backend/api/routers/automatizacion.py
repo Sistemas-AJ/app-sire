@@ -83,14 +83,25 @@ def stop_automation(
     Solicita detener la automatización de forma segura.
     Se detendrá después de terminar la empresa actual.
     """
-    query = db.query(BuzonRun).filter(BuzonRun.status == "RUNNING")
+    running = db.query(BuzonRun).filter(BuzonRun.status == "RUNNING")
     if ruc:
-        query = query.filter(BuzonRun.ruc_empresa == ruc)
+        running = running.filter(BuzonRun.ruc_empresa == ruc)
     if fecha_desde:
-        query = query.filter(BuzonRun.fecha_desde == fecha_desde)
-    updated = query.update({"stop_requested": True}, synchronize_session=False)
+        running = running.filter(BuzonRun.fecha_desde == fecha_desde)
+    updated = running.update({"stop_requested": True}, synchronize_session=False)
+
+    pending = db.query(BuzonRun).filter(BuzonRun.status == "PENDING")
+    if ruc:
+        pending = pending.filter(BuzonRun.ruc_empresa == ruc)
+    if fecha_desde:
+        pending = pending.filter(BuzonRun.fecha_desde == fecha_desde)
+    stopped = pending.update({"status": "STOPPED"}, synchronize_session=False)
     db.commit()
-    return {"message": "Se ha solicitado detener la automatización.", "updated": updated}
+    return {
+        "message": "Se ha solicitado detener la automatización.",
+        "running_marked": updated,
+        "pending_stopped": stopped,
+    }
 
 @router.get("/runs", response_model=schemas.BuzonRunResponse)
 def list_runs(

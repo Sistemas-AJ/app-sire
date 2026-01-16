@@ -90,15 +90,22 @@ def download_zip(
 @router.get("/download")
 def download_file(path: str = Query(..., description="Ruta absoluta dentro de REGISTROS_DIR")):
     """
-    Descarga un archivo arbitrario siempre que esté dentro de REGISTROS_DIR.
+    Descarga un archivo arbitrario siempre que esté dentro de REGISTROS_DIR o downloads.
     """
     if not path:
         raise HTTPException(status_code=400, detail="path es requerido")
 
-    base = os.path.abspath(REGISTROS_DIR)
+    base_registros = os.path.abspath(REGISTROS_DIR)
+    base_downloads = os.path.abspath(os.path.join(os.getcwd(), "downloads"))
     target = os.path.abspath(path)
 
-    if not target.startswith(base + os.sep) and target != base:
+    allowed = False
+    for base in (base_registros, base_downloads):
+        if target == base or target.startswith(base + os.sep):
+            allowed = True
+            break
+
+    if not allowed:
         raise HTTPException(status_code=403, detail="Ruta no permitida")
     if not os.path.exists(target):
         raise HTTPException(status_code=404, detail="Archivo no encontrado")

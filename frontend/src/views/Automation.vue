@@ -58,7 +58,8 @@
                 </button>
                 
                 <div v-if="['RUNNING', 'PENDING'].includes(jobStatus)" class="flex flex-col items-center gap-2">
-                    <p class="text-xs text-gray-500 text-center animate-pulse">Solicitando detención al finalizar tarea actual...</p>
+                    <p v-if="isStopping" class="text-xs text-red-400 text-center animate-pulse">Solicitando detención del servidor...</p>
+                    <p v-else class="text-xs text-green-500 text-center animate-pulse">Proceso Activo: Analizando buzones...</p>
                 </div>
             </div>
         </div>
@@ -133,8 +134,9 @@
                             <td colspan="3" class="p-4 text-center text-gray-500">Sin ejecuciones recientes.</td>
                         </tr>
                         <tr v-for="run in runs" :key="run.id" class="hover:bg-dark-border/30">
-                            <td class="px-3 py-2 font-medium text-gray-300">
-                                {{ run.ruc_empresa }}
+                            <td class="px-3 py-2">
+                                <div class="font-medium text-gray-200">{{ getCompanyName(run.ruc_empresa) }}</div>
+                                <div class="text-[10px] text-gray-500 font-mono">{{ run.ruc_empresa }}</div>
                             </td>
                             <td class="px-3 py-2">
                                 <span v-if="run.status === 'RUNNING'" class="text-blue-400 animate-pulse font-bold">RUNNING</span>
@@ -161,10 +163,12 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import api from '../apiConfig';
 
 // State
-const jobStatus = ref('UNKNOWN'); // PENDING, RUNNING, PARTIAL, ERROR, OK, STOPPED
+const jobStatus = ref('UNKNOWN'); 
 const runs = ref([]);
 const companies = ref([]);
 const errors = ref([]);
+const statusData = ref(null); // Back to ref, populated by API
+const isStopping = ref(false);
 
 // Inputs
 const runMode = ref('todo');
@@ -184,41 +188,32 @@ const getSevenDaysAgo = () => {
 startDate.value = getSevenDaysAgo();
 endDate.value = getToday();
 
-// Computed Stats derived from Runs
-const statusData = computed(() => {
-    // Default structure to match UI
-    const summary = {
-        total_empresas: runs.value.length,
-        pendientes: 0,
-        procesando: 0,
-        completados: 0,
-        sin_novedades: 0,
-        errores: 0
-    };
-    
-    runs.value.forEach(r => {
-        if (r.status === 'PENDING') summary.pendientes++;
-        else if (r.status === 'RUNNING') summary.procesando++;
-        else if (r.status === 'OK') summary.completados++; // or check stats_json?
-        else if (r.status === 'PARTIAL') summary.errores++; // Count partial as error or separate?
-        else if (r.status === 'ERROR') summary.errores++;
-        else if (r.status === 'STOPPED') summary.errores++; // Or separate?
-    });
-    
-    return { resumen: summary };
-});
-
 const isRunning = computed(() => {
-    // Global running if any run is active
     return runs.value.some(r => ['PENDING', 'RUNNING'].includes(r.status));
 });
 
 // Actions
+const getCompanyName = (ruc) => companies.value.find(c => c.ruc === ruc)?.razon_social || ruc;
+
 const fetchCompanies = async () => {
     try {
         const res = await api.get('/empresas/');
         companies.value = res.data || [];
     } catch(e) { console.error(e); }
+};
+
+const fetchSummary = async () => {
+    try {
+        // We ask the backend for the global status relative to the date range
+        // If the backend doesn't support params, it might just return "Today".
+        // But we'll try sending them.
+        const params = { 
+            fecha_desde: startDate.value,
+            fecha_hasta: endDate.value
+        };
+        const res = await api.get('/automatizacion/status', { params });
+        statusData.value = res.data;
+    } catch (e) { console.error("Error fetching status summary", e); }
 };
 
 const fetchRuns = async () => {
@@ -241,6 +236,10 @@ const fetchRuns = async () => {
         else if (runs.value.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
         else if (runs.value.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
         else jobStatus.value = 'OK';
+        
+        if (!['RUNNING', 'PENDING'].includes(jobStatus.value)) {
+            isStopping.value = false;
+        }
 
     } catch(e) { 
         console.error("Error fetching runs", e); 
@@ -301,44 +300,45 @@ const runAutomation = async () => {
 };
 
 const stopAutomation = async () => {
-    if(!confirm("¿Detener ejecuciones activas?")) return;
+    if(!confirm("¿Detener TODAS las ejecuciones activas?")) return;
+    isStopping.value = true;
     try {
-        // Find active runs and stop them.
-        const active = runs.value.filter(r => ['PENDING', 'RUNNING'].includes(r.status));
-        for (const run of active) {
-             // Assuming run has ruc_empresa. User example params: stop?ruc=...&fecha_desde=...
-             // The run object likely has this info.
-             // If run object structure is unknown, this is risky.
-             // User said: "POST /automatizacion/stop?ruc=...&fecha_desde=..."
-             // I'll guess run.ruc_empresa exists.
-             if (run.ruc_empresa) {
-                 await api.post(`/automatizacion/stop`, null, { 
-                     params: { ruc: run.ruc_empresa, fecha_desde: startDate.value } 
-                 });
-             }
-        }
-        alert("Solicitud de detención enviada.");
+        // Global Stop
+        await api.post('/automatizacion/stop');
+        
+        // alert("Solicitud de detención enviada."); // Optional if UI updating
         fetchRuns();
     } catch (e) {
         alert("Error al detener: " + e.message);
+        isStopping.value = false;
     }
 };
 
 // Lifecycle
 let pollingInterval = null;
+let isActive = false;
+
 const poll = async () => {
+    if (!isActive) return;
     await fetchRuns();
+    if (!isActive) return;
+    await fetchSummary();
+    if (!isActive) return;
     await fetchErrors();
+    
+    if (!isActive) return;
     const delay = isRunning.value ? 4000 : 10000;
     pollingInterval = setTimeout(poll, delay);
 };
 
 onMounted(async () => {
+    isActive = true;
     await fetchCompanies();
     poll();
 });
 
 onUnmounted(() => {
+    isActive = false;
     if(pollingInterval) clearTimeout(pollingInterval);
 });
 </script>
