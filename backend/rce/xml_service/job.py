@@ -25,11 +25,43 @@ _STOP_REQUESTED = set()
 def request_stop(ruc: Optional[str] = None, periodo: Optional[str] = None) -> None:
     if ruc or periodo:
         _STOP_REQUESTED.add((ruc, periodo))
-        return
-    _STOP_REQUESTED.add((None, None))
+    else:
+        _STOP_REQUESTED.add((None, None))
 
-def _should_stop(ruc: str, periodo: str) -> bool:
-    return (None, None) in _STOP_REQUESTED or (ruc, None) in _STOP_REQUESTED or (ruc, periodo) in _STOP_REQUESTED
+    with db_session() as db:
+        base = db.query(RCERun).filter(RCERun.modulo == "XML")
+        if ruc:
+            base = base.filter(RCERun.ruc_empresa == ruc)
+        if periodo:
+            base = base.filter(RCERun.periodo == periodo)
+
+        running = base.filter(RCERun.status == "RUNNING")
+        running.update({"status": "STOP_REQUESTED"}, synchronize_session=False)
+
+        pending = base.filter(RCERun.status == "PENDING")
+        pending.update({"status": "STOPPED"}, synchronize_session=False)
+        db.commit()
+
+def _should_stop_db(run_id: Optional[int], ruc: str, periodo: str) -> bool:
+    with db_session() as db:
+        if run_id:
+            run = db.query(RCERun).filter(RCERun.id == run_id).first()
+            return bool(run and run.status in ("STOP_REQUESTED", "STOPPED"))
+        q = (
+            db.query(RCERun)
+            .filter(RCERun.modulo == "XML", RCERun.ruc_empresa == ruc, RCERun.periodo == periodo)
+            .filter(RCERun.status.in_(["STOP_REQUESTED", "STOPPED"]))
+        )
+        return db.query(q.exists()).scalar()
+
+
+def _should_stop(ruc: str, periodo: str, run_id: Optional[int]) -> bool:
+    return (
+        (None, None) in _STOP_REQUESTED
+        or (ruc, None) in _STOP_REQUESTED
+        or (ruc, periodo) in _STOP_REQUESTED
+        or _should_stop_db(run_id, ruc, periodo)
+    )
 
 def tipo_label_from_tipo_cp(tipo_cp: str) -> str:
     return TIPO_CP_TO_LABEL.get(tipo_cp, "Factura")
@@ -100,7 +132,7 @@ def run_xml_job_for_empresa_periodo(
             raise RuntimeError("No se pudo loguear/navegar en SOL")
 
         for item in items:
-            if _should_stop(emp_ruc, periodo):
+            if _should_stop(emp_ruc, periodo, run_id):
                 stopped = True
                 print(f"🛑 Stop solicitado. Deteniendo empresa {emp_ruc} periodo {periodo}.")
                 break
