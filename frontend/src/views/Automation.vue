@@ -223,12 +223,17 @@ const fetchCompanies = async () => {
 
 const fetchRuns = async () => {
     try {
-        // Query runs for the selected date range to show history/progress
-        // Actually, user said /automatizacion/runs?fecha_desde=...
-        // We'll use startDate as filter
         const params = { fecha_desde: startDate.value };
         const res = await api.get('/automatizacion/runs', { params });
-        runs.value = res.data || [];
+        
+        if (Array.isArray(res.data)) {
+            runs.value = res.data;
+        } else if (res.data && Array.isArray(res.data.runs)) {
+            runs.value = res.data.runs;
+        } else {
+            console.warn("Unexpected response format for runs:", res.data);
+            runs.value = [];
+        }
         
         // Determine Global Status
         if (runs.value.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
@@ -237,7 +242,10 @@ const fetchRuns = async () => {
         else if (runs.value.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
         else jobStatus.value = 'OK';
 
-    } catch(e) { console.error("Error fetching runs", e); }
+    } catch(e) { 
+        console.error("Error fetching runs", e); 
+        runs.value = [];
+    }
 };
 
 const fetchErrors = async () => {
