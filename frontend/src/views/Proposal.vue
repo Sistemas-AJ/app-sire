@@ -110,7 +110,10 @@
              <!-- Processing State -->
             <div v-if="processing" class="flex-1 flex flex-col items-center justify-center text-primary">
                  <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mb-4"></div>
-                 <p class="text-white font-medium animate-pulse">Procesando {{ selectedRucs.length }} empresas...</p>
+                 <p class="text-white font-medium animate-pulse">
+                    Procesando {{ selectedRucs.length }} empresas...
+                    <span v-if="totalBatches > 1" class="block text-sm text-primary mt-1">Lote {{ processingBatch }} de {{ totalBatches }}</span>
+                 </p>
                  <p class="text-xs text-gray-400 mt-2">Esto puede tomar unos momentos</p>
             </div>
 
@@ -150,11 +153,24 @@
                     <h4 class="text-red-400 font-bold text-sm mb-3 uppercase tracking-wider">❌ Errores ({{ errors.length }})</h4>
                      <div class="space-y-2">
                         <div v-for="(err, idx) in errors" :key="idx" class="bg-red-900/10 border border-red-900/30 rounded-lg p-3">
-                            <div class="flex items-center justify-between mb-1">
-                                <span class="text-red-300 font-bold text-sm">{{ getCompanyName(err.ruc) || err.ruc }}</span>
-                                <span class="text-red-500/50 text-[10px] font-mono">{{ err.ruc }}</span>
+                            <!-- Helper to extract RUC from string if formatted as "RUC: msg" -->
+                            <div v-if="typeof err === 'string' && err.includes(':')" class="flex flex-col">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-red-300 font-bold text-sm">{{ getCompanyName(err.split(':')[0].trim()) || err.split(':')[0].trim() }}</span>
+                                    <span class="text-red-500/50 text-[10px] font-mono">{{ err.split(':')[0].trim() }}</span>
+                                </div>
+                                <p class="text-gray-400 text-xs">{{ err.split(':').slice(1).join(':').trim() }}</p>
                             </div>
-                             <p class="text-gray-400 text-xs">{{ err.error || 'Error desconocido' }}</p>
+                            <div v-else-if="typeof err === 'string'">
+                                <p class="text-gray-400 text-xs">{{ err }}</p>
+                            </div>
+                            <div v-else>
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-red-300 font-bold text-sm">{{ getCompanyName(err.ruc) || err.ruc }}</span>
+                                    <span class="text-red-500/50 text-[10px] font-mono">{{ err.ruc }}</span>
+                                </div>
+                                <p class="text-gray-400 text-xs">{{ err.error || 'Error desconocido' }}</p>
+                            </div>
                         </div>
                      </div>
                 </div>
@@ -256,11 +272,6 @@ const getFileUrl = (internalPath) => {
     
     // For now, I will assume a generic endpoint `/download_file` exists or similar. 
     // If not, I'll just link to the api url + path and hope backend handles it.
-    // Let's stick to just the path for display if we can't download.
-    // Actually, I'll log it.
-    
-    // Re-reading user request: "results: lista con rutas... El frontend puede mostrar las rutas para descargar"
-    // I will pass the path to a hypothetical download endpoint.
     return `/api/files/download?path=${encodeURIComponent(internalPath)}`;
 };
 
@@ -268,36 +279,46 @@ const runProposal = async () => {
     processing.value = true;
     results.value = [];
     errors.value = [];
-
-    const payload = {
-        periodo: config.value.periodo,
-        fec_ini: config.value.fec_ini,
-        fec_fin: config.value.fec_fin,
-        rucs: selectedRucs.value
-    };
+    
+    // Batch configuration
+    const BATCH_SIZE = 10;
+    const total = selectedRucs.value.length;
+    const batches = [];
+    
+    for (let i = 0; i < total; i += BATCH_SIZE) {
+        batches.push(selectedRucs.value.slice(i, i + BATCH_SIZE));
+    }
+    
+    totalBatches.value = batches.length;
+    processingBatch.value = 0;
 
     try {
-        const res = await api.post('/propuesta/run', payload);
-        
-        // Response structure: { ok: bool, results: [], errors: [] }
-        if (res.data) {
-            results.value = res.data.results || [];
-            errors.value = res.data.errors || [];
+        for (const [index, batchRucs] of batches.entries()) {
+            processingBatch.value = index + 1;
+            // Update UI/Console or toast if needed
+            // console.log(`Procesando lote ${processingBatch.value}/${totalBatches.value}`);
+
+            const payload = {
+                periodo: config.value.periodo,
+                fec_ini: config.value.fec_ini,
+                fec_fin: config.value.fec_fin,
+                rucs: batchRucs
+            };
+
+            // Standard timeout sufficient for small batches
+            const res = await api.post('/propuesta/run', payload, { timeout: 60000 });
             
-            if (errors.value.length > 0) {
-                // Determine if mixed success
-                if (results.value.length > 0) {
-                    // Mixed
-                } else {
-                    // All failed
-                }
+            if (res.data) {
+                if (res.data.results) results.value.push(...res.data.results);
+                if (res.data.errors) errors.value.push(...res.data.errors);
             }
         }
     } catch (e) {
         console.error("Error generating proposal", e);
-        alert("Error de conexión o servidor: " + e.message);
+        alert(`Error en el lote ${currentBatch.value}: ` + e.message);
     } finally {
         processing.value = false;
+        currentBatch.value = 0;
     }
 };
 

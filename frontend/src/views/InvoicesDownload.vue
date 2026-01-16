@@ -578,7 +578,7 @@ const startPolling = () => {
     };
 
     pollFn(); // First run
-    pollingInterval = setInterval(pollFn, 3000); 
+    pollingInterval = setInterval(pollFn, 6000); 
 };
 
 const stopAll = async () => {
