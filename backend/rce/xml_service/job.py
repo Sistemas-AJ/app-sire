@@ -39,8 +39,8 @@ def run_xml_job_for_empresa_periodo(
     periodo: str,
     limit: Optional[int] = None,
     headless: bool = False,
+    run_id: Optional[int] = None,
 ):
-    run_id = None
     # Nuevo run: limpiar stops previos para esta empresa/periodo
     _STOP_REQUESTED.discard((None, None))
     _STOP_REQUESTED.discard((ruc_empresa, periodo))
@@ -70,17 +70,21 @@ def run_xml_job_for_empresa_periodo(
         print(f"📌 Pendientes XML: {len(items)} | empresa={ruc_empresa} periodo={periodo}")
 
         if not items:
+            if run_id:
+                run = db.query(RCERun).filter(RCERun.id == run_id).first()
+                if run:
+                    run.status = "OK"
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.stats_json = {"ok": 0, "error": 0, "auth": 0, "not_found": 0}
+                    db.commit()
             return
 
-        run = RCERun(
-            ruc_empresa=ruc_empresa,
-            periodo=periodo,
-            modulo="XML",
-            status="RUNNING",
-        )
-        db.add(run)
-        db.commit()
-        run_id = run.id
+        if run_id:
+            run = db.query(RCERun).filter(RCERun.id == run_id).first()
+            if run:
+                run.status = "RUNNING"
+                run.started_at = datetime.now(timezone.utc)
+                db.commit()
 
     # scraper fuera del scope DB para no tener session abierta en todo el loop
     scraper = SolXMLScraper(headless=headless)

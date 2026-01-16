@@ -35,12 +35,32 @@ def run_xml(req: schemas.XMLRunRequest):
                 .all()
             ]
 
-    for ruc in rucs:
-        try:
-            run_xml_job_for_empresa_periodo(ruc, req.periodo, limit=req.limit, headless=req.headless)
+    with db_session() as db:
+        for ruc in rucs:
+            existing = (
+                db.query(RCERun)
+                .filter(
+                    RCERun.modulo == "XML",
+                    RCERun.ruc_empresa == ruc,
+                    RCERun.periodo == req.periodo,
+                    RCERun.status.in_(["PENDING", "RUNNING"]),
+                )
+                .first()
+            )
+            if existing:
+                processed.append(ruc)
+                continue
+
+            run = RCERun(
+                ruc_empresa=ruc,
+                periodo=req.periodo,
+                modulo="XML",
+                status="PENDING",
+                stats_json={"limit": req.limit, "headless": req.headless},
+            )
+            db.add(run)
             processed.append(ruc)
-        except Exception as e:
-            errors.append(f"{ruc}: {e}")
+        db.commit()
 
     return schemas.XMLRunResponse(ok=len(errors) == 0, processed_rucs=processed, errors=errors)
 
