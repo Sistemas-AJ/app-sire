@@ -122,6 +122,9 @@
                              <a v-if="item.status_xml === 'OK' && item.xml_path" :href="getDownloadLink(item.xml_path)" target="_blank" class="text-green-400 hover:text-green-300 font-bold text-xs underline" title="Descargar XML">
                                 XML
                             </a>
+                            <a v-if="item.status_xml === 'OK' && item.xml_path" :href="getDownloadLink(item.xml_path.replace('/xml/', '/pdf/').replace('.xml', '.pdf'))" target="_blank" class="text-red-400 hover:text-red-300 font-bold text-xs underline" title="Descargar PDF">
+                                PDF
+                            </a>
                             <button @click="openDetail(item.id)" class="text-blue-400 hover:text-blue-300 font-bold text-xs underline">
                                 Detalle
                             </button>

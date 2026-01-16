@@ -6,6 +6,7 @@ from core.database import db_session, RCERun
 from .repository import (
     get_empresa,
     fetch_items_pendientes_xml,
+    get_or_create_evidencia,
     get_or_create_evidencia_xml,
     mark_attempt,
 )
@@ -145,6 +146,16 @@ def run_xml_job_for_empresa_periodo(
                         downloaded_at=datetime.now(timezone.utc),
                         wait_seconds=0,
                     )
+                    if result.pdf_path:
+                        ev_pdf = get_or_create_evidencia(db, item["id"], "PDF")
+                        mark_attempt(
+                            db,
+                            ev_pdf,
+                            status="OK",
+                            error_message=None,
+                            storage_path=result.pdf_path,
+                            wait_seconds=0,
+                        )
                     try:
                         detalle_json = parse_detalle(result.xml_path)
                         save_detalle(

@@ -24,6 +24,7 @@ class BusquedaComprobante:
 class DescargaResult:
     ok: bool
     xml_path: Optional[str] = None
+    pdf_path: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -123,6 +124,26 @@ def consultar_y_descargar_xml_individual(
 
         final_name = f"{busqueda.ruc_emisor}_{busqueda.serie}_{busqueda.numero}.xml"
         xml_path = _guardar_y_extraer_zip(download, out_dir=out_dir, final_xml_name=final_name)
+
+        # Descargar PDF (opcional, mismo panel)
+        pdf_path = None
+        try:
+            print("  🖱️ Localizando botón PDF por tooltip...")
+            btn_pdf = frame.locator("button[ngbtooltip='Descargar PDF']")
+            btn_pdf.wait_for(state="visible", timeout=3000)
+
+            pdf_dir = os.path.join(os.path.dirname(out_dir), "pdf")
+            os.makedirs(pdf_dir, exist_ok=True)
+            pdf_name = f"{busqueda.ruc_emisor}_{busqueda.serie}_{busqueda.numero}.pdf"
+            pdf_path = os.path.join(pdf_dir, pdf_name)
+
+            print("  📥 Iniciando descarga del PDF...")
+            with page.expect_download() as pdf_info:
+                btn_pdf.click()
+            pdf_info.value.save_as(pdf_path)
+        except Exception:
+            # PDF no bloquea la descarga del XML
+            pdf_path = None
         try:
             close_btn = frame.locator("button.close-without-header, button[aria-label='Close'].close-without-header")
             close_btn.wait_for(state="visible", timeout=3000)
@@ -133,7 +154,7 @@ def consultar_y_descargar_xml_individual(
             pass
 
         print(f"✅ XML guardado en: {xml_path}")
-        return DescargaResult(ok=True, xml_path=xml_path)
+        return DescargaResult(ok=True, xml_path=xml_path, pdf_path=pdf_path)
 
     except Exception as e:
         return DescargaResult(ok=False, error=str(e))

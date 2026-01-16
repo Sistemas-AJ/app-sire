@@ -242,6 +242,7 @@
                                     <td class="px-4 py-3"><span :class="getStatusBadge(item.status)" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border">{{ item.status }}</span></td>
                                     <td class="px-4 py-3 text-right space-x-2">
                                         <a v-if="item.status === 'OK'" :href="getDownloadLink(item.storage_path)" target="_blank" class="text-green-400 hover:text-green-300 font-bold text-xs underline">XML</a>
+                                        <a v-if="item.status === 'OK'" :href="getDownloadLink(item.storage_path.replace('/xml/', '/pdf/').replace('.xml', '.pdf'))" target="_blank" class="text-red-400 hover:text-red-300 font-bold text-xs underline">PDF</a>
                                         <button @click="openDetail(item.propuesta_item_id)" class="text-blue-400 hover:text-blue-300 font-bold text-xs underline">Ver Detalle</button>
                                     </td>
                                 </tr>

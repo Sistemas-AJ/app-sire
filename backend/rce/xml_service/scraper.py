@@ -27,6 +27,7 @@ from .config import (
 class ScrapeResult:
     ok: bool
     xml_path: Optional[str] = None
+    pdf_path: Optional[str] = None
     sha256: Optional[str] = None
     error: Optional[str] = None
     auth_error: bool = False
@@ -194,7 +195,7 @@ class SolXMLScraper:
                     )
                     if res.ok:
                         sha = _sha256_file(res.xml_path)
-                        return ScrapeResult(ok=True, xml_path=res.xml_path, sha256=sha)
+                        return ScrapeResult(ok=True, xml_path=res.xml_path, pdf_path=res.pdf_path, sha256=sha)
             err = (res.error or "").lower()
             auth_like = ("login" in err) or ("autentic" in err) or ("401" in err)
             time.sleep(WAIT_ON_FAIL_SECONDS if not retried else 2)
@@ -202,4 +203,4 @@ class SolXMLScraper:
             return ScrapeResult(ok=False, error=res.error, auth_error=auth_like)
 
         sha = _sha256_file(res.xml_path)
-        return ScrapeResult(ok=True, xml_path=res.xml_path, sha256=sha)
+        return ScrapeResult(ok=True, xml_path=res.xml_path, pdf_path=res.pdf_path, sha256=sha)

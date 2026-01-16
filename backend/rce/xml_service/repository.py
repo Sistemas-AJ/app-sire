@@ -43,23 +43,27 @@ def fetch_items_pendientes_xml(
     return q.all()
 
 
-def get_or_create_evidencia_xml(db: Session, item_id: int) -> CPEEvidencia:
+def get_or_create_evidencia(db: Session, item_id: int, tipo: str) -> CPEEvidencia:
     ev = (
         db.query(CPEEvidencia)
-        .filter(CPEEvidencia.propuesta_item_id == item_id, CPEEvidencia.tipo == "XML")
+        .filter(CPEEvidencia.propuesta_item_id == item_id, CPEEvidencia.tipo == tipo)
         .first()
     )
     if ev:
         return ev
     ev = CPEEvidencia(
         propuesta_item_id=item_id,
-        tipo="XML",
+        tipo=tipo,
         status="PENDING",
         attempt_count=0,
     )
     db.add(ev)
     db.flush()  # para obtener id sin commit
     return ev
+
+
+def get_or_create_evidencia_xml(db: Session, item_id: int) -> CPEEvidencia:
+    return get_or_create_evidencia(db, item_id, "XML")
 
 
 def mark_attempt(
