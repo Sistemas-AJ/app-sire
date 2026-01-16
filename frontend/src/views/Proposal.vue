@@ -194,6 +194,8 @@ const selectedRucs = ref([]);
 
 const results = ref([]);
 const errors = ref([]);
+const totalBatches = ref(0);
+const processingBatch = ref(0);
 
 // Dates Setup
 const now = new Date();
@@ -315,10 +317,10 @@ const runProposal = async () => {
         }
     } catch (e) {
         console.error("Error generating proposal", e);
-        alert(`Error en el lote ${currentBatch.value}: ` + e.message);
+        alert(`Error en el lote ${processingBatch.value}: ` + e.message);
     } finally {
         processing.value = false;
-        currentBatch.value = 0;
+        processingBatch.value = 0;
     }
 };
 
