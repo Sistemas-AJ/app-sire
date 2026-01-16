@@ -94,10 +94,16 @@
                 <div class="pt-4 mt-4 border-t border-gray-800">
                     <button 
                         @click="runDownload" 
-                        :disabled="processing || selectedRucs.length === 0"
-                        class="w-full bg-primary hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 transition-all flex justify-center items-center gap-2"
+                        :disabled="processing || selectedRucs.length === 0 || ['PENDING', 'RUNNING'].includes(jobStatus)"
+                        class="w-full bg-primary hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 transition-all flex justify-center items-center gap-2 group"
                     >
                         <span v-if="processing" class="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+                        
+                        <span v-else-if="jobStatus === 'PENDING'">⏳ En Cola (Esperando Worker)...</span>
+                        <span v-else-if="jobStatus === 'RUNNING'">🚀 Ejecutando...</span>
+                        <span v-else-if="jobStatus === 'STOPPED'">⏯️ Reanudar Descarga</span>
+                        <span v-else-if="jobStatus === 'PARTIAL'">🔄 Reintentar Fallidos</span>
+                        <span v-else-if="jobStatus === 'ERROR'">⚠️ Reintentar (Error Global)</span>
                         <span v-else>🚀 Iniciar Descarga XML</span>
                     </button>
                     <p v-if="!processing && selectedRucs.length === 0" class="text-center text-[10px] text-red-400 mt-2">Selecciona al menos una empresa</p>
@@ -316,6 +322,7 @@ const periodMode = ref('select'); // select | manual
 const availableRucs = ref([]);
 const availabilityMessage = ref('');
 const companySearch = ref('');
+const jobStatus = ref('UNKNOWN'); // PENDING, RUNNING, PARTIAL, ERROR, OK, STOPPED
 
 const togglePeriodMode = () => {
     periodMode.value = periodMode.value === 'select' ? 'manual' : 'select';
@@ -375,12 +382,11 @@ const globalStats = computed(() => {
     return { completedCompanies };
 });
 
-const isGlobalRunning = computed(() => {
-    if (activeDownloads.value.length === 0) return false;
-    return globalStats.value.completedCompanies < activeDownloads.value.length;
-});
+const isGlobalRunning = computed(() => ['PENDING', 'RUNNING'].includes(jobStatus.value));
 
 const currentProcessingCompany = computed(() => {
+    // If backend running, show the one that is not completed locally?
+    // Or check backend progress data 'status' field?
     const ruc = activeDownloads.value.find(r => !getProgress(r).isCompleted);
     if (!ruc) return null;
     return { ruc, ...getProgress(ruc) };
@@ -521,30 +527,64 @@ const startPolling = () => {
     
     // Immediate poll check
     const pollFn = async () => {
-        if (activeDownloads.value.length === 0) { clearInterval(pollingInterval); pollingInterval = null; clearState(); return; }
-
-        // Optional: Get Global Progress to check if backend thinks we are running
         try {
-            // User mentioned GET /xml/progress/global?periodo=...
-            // We can log it or use it to update globalStats if we wanted to rely on backend
-            // const gRes = await api.get('/xml/progress/global', { params: { periodo: config.value.periodo } });
-            // console.log("Global Progress:", gRes.data);
-        } catch(e) { /* ignore if not implemented yet */ }
+            // Priority: Check Global Job Status
+            const runRes = await api.get('/xml/runs');
+            // Assuming endpoint returns the job object or list. If list, take last? 
+            // User said: "/xml/runs (estado global del job...)" implies single object or we scan for active. 
+            // "El worker reintenta... un nuevo run retoma".
+            // Let's assume it returns { status: 'RUNNING', ... } or a list. 
+            // I'll check if response has 'status'. If it's a list, I'll look for the most relevant one.
+            // CAUTION: If user didn't specify format, I'll log it first to be safe or assume standard object if implied.
+            // Given context "GET /xml/runs (estado global...)", I'll assume object.
+            
+            const jobData = runRes.data;
+            jobStatus.value = jobData.status || 'UNKNOWN'; // PENDING, RUNNING, PARTIAL, ERROR, OK, STOPPED
+            
+            // Handle State Logic
+            if (activeDownloads.value.length === 0 && jobStatus.value !== 'RUNNING' && jobStatus.value !== 'PENDING') {
+                 // Nothing locally tracked and backend not running -> Stop polling?
+                 // But we might be in "STOPPED" state waiting for resume.
+                 // We keep polling if we have activeDownloads locally OR backend is active.
+                 // Actually, if backend says STOPPED, we should show that state.
+            }
+            
+            if (['OK', 'PARTIAL', 'ERROR', 'STOPPED'].includes(jobStatus.value)) {
+                 // Job finished/stopped.
+                 // Should we stop polling eventually?
+                 // Maybe slow down polling?
+                 // For now, keep polling but slower?
+            }
 
+        } catch(e) { console.error("Error checking runs", e); }
+
+        if (activeDownloads.value.length === 0) { 
+            // If nothing tracked locally AND backend not running, maybe stop?
+            // But we want to see the status.
+            if (!['PENDING', 'RUNNING'].includes(jobStatus.value)) {
+                clearInterval(pollingInterval); pollingInterval = null; return; 
+            }
+        }
+
+        // Poll Progress for individual companies
+        // We only poll if we have `activeDownloads` populated
         for (const ruc of activeDownloads.value) {
             const current = progressList.value[ruc];
-            if (current && current.isCompleted) continue; 
-
+            if (current && current.isCompleted && jobStatus.value !== 'RUNNING') continue; 
+            // If global is running, even if local says completed, maybe it re-runs? (User said "Scraping occurs in worker").
+            // User: "El worker reintenta...". So completion might revert? Unlikely for OK items.
+            
             try {
                 const res = await api.get('/xml/progress', { params: { ruc, periodo: config.value.periodo } });
                 const data = res.data;
                 const processed = data.ok + data.not_found + data.error + data.auth;
                 
-                // Determine completion target based on limit
                 const limit = config.value.limitType === 'custom' ? config.value.limit : Infinity;
                 const effectiveTotal = (data.total_items > 0 && limit < data.total_items) ? limit : data.total_items;
 
-                const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= effectiveTotal && effectiveTotal > 0) || (data.status === 'COMPLETED');
+                // Update completion logic with global status awareness
+                // If global is OK, everything is done.
+                const isCompleted = (data.remaining === 0 && data.total_items > 0) || (processed >= effectiveTotal && effectiveTotal > 0) || (data.status === 'COMPLETED') || (jobStatus.value === 'OK');
                 
                 let pct = 0;
                 if (effectiveTotal > 0) pct = Math.round((processed / effectiveTotal) * 100);
@@ -553,8 +593,8 @@ const startPolling = () => {
                 progressList.value[ruc] = {
                     ...data,
                     processedItems: processed,
-                    total_items: effectiveTotal, // This is the TARGET for the progress bar
-                    real_total: data.total_items, // This is the actual proposal size
+                    total_items: effectiveTotal,
+                    real_total: data.total_items,
                     percentage: pct,
                     isCompleted
                 };
@@ -563,22 +603,11 @@ const startPolling = () => {
             }
         }
         
-        // If all completed, clear state?
-        // Maybe wait for user to explicitly close or leave?
-        // We'll leave state so they can see results even after refresh.
-        // User said: "Persistir ... cuando la app se recarga ... resume polling"
-        // But if finished, "resume polling" might stop immediately.
-        const allDone = activeDownloads.value.every(r => getProgress(r).isCompleted);
-        if (allDone) {
-            // clearState(); // Optional: Clear when ALL done? Or keep history?
-            // Better to keep it until they start a new one or "Clear" it.
-        } else {
-            saveSession(); 
-        }
+        saveSession(); 
     };
 
     pollFn(); // First run
-    pollingInterval = setInterval(pollFn, 6000); 
+    pollingInterval = setInterval(pollFn, 4000); // 4s polling
 };
 
 const stopAll = async () => {

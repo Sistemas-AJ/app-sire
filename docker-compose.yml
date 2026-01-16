@@ -95,6 +95,29 @@ services:
     networks:
       - fact_net
 
+  buzon_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: facturador_buzon_worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://Lopez:Lopez@postgres:5432/pgsunat
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./data/downloads:/app/downloads
+      - ./data/sessions:/app/sessions
+      - ./data/empresas:/app/empresas
+      - ./data/logs:/app/logs
+      - ./data/sessions_propuesta:/app/sessions_propuesta
+      - ./data/registros:/app/registros
+    command: ["python", "-m", "automation.worker"]
+    networks:
+      - fact_net
+
 networks:
   fact_net:
     driver: bridge

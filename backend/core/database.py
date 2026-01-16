@@ -19,7 +19,12 @@ else:
     default_port = "5432" if in_docker else "5434"
     DATABASE_URL = f"postgresql+psycopg2://Lopez:Lopez@{default_host}:{default_port}/pgsunat"
 
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -87,6 +92,35 @@ class Notificacion(Base):
 
     def __repr__(self):
         return f"<Notificacion(id={self.id}, asunto='{self.asunto[:20]}...')>"
+
+
+class BuzonRun(Base):
+    __tablename__ = "buzon_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
+
+    fecha_desde = Column(Date, nullable=False)
+    fecha_hasta = Column(Date, nullable=True)
+
+    status = Column(String(20), nullable=False, default="PENDING")
+    retry_mode = Column(String(20), nullable=True)  # todo/pendientes/solo_fallidos
+    headless = Column(Boolean, default=True)
+    stop_requested = Column(Boolean, default=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    last_error = Column(Text, nullable=True)
+    stats_json = Column(JSON, nullable=True)
+
+    empresa = relationship("Empresa")
+
+    __table_args__ = (
+        Index("ix_buzon_runs_ruc_fecha", "ruc_empresa", "fecha_desde"),
+        Index("ix_buzon_runs_status", "status"),
+    )
 
 
 class RCERun(Base):

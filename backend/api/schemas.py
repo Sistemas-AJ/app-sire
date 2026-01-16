@@ -241,6 +241,32 @@ class DetalleResponse(BaseModel):
         orm_mode = True
 
 class AutomationRunRequest(BaseModel):
-    mode: str = "todo" # 'todo' | 'solo_fallidos'
-    days_back: int = 7
+    mode: str = "todo" # todo | pendientes | solo_fallidos
+    days_back: Optional[int] = 7
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    rucs: Optional[List[str]] = None
     show_browser: bool = True # Nuevo param
+
+class BuzonRunItem(BaseModel):
+    id: int
+    ruc_empresa: str
+    fecha_desde: date
+    fecha_hasta: Optional[date] = None
+    status: str
+    retry_mode: Optional[str] = None
+    headless: bool
+    stop_requested: bool
+    stats_json: Optional[Any] = None
+    last_error: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+class BuzonRunResponse(BaseModel):
+    ok: bool
+    runs: List[BuzonRunItem] = []
+    errors: List[str] = []

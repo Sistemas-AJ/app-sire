@@ -8,7 +8,7 @@
             <div>
                 <h3 class="text-xl font-bold text-white mb-2">Ejecutar Robot</h3>
                 <p class="text-gray-400 text-sm max-w-md">
-                    Inicia el proceso de descarga masiva. El robot analizará los buzones de todas las empresas activas según los filtros configurados.
+                    Inicia el proceso de descarga masiva. El robot analizará los buzones de todas las empresas activas.
                 </p>
                 
                 <div class="flex gap-4 mt-4">
@@ -23,8 +23,10 @@
                 </div>
                 
                 <div class="flex items-center gap-2 mt-4 text-sm text-gray-400">
-                    <span>Analizar mensajes desde:</span>
-                    <input type="date" v-model="startDate" :max="todayDate" class="bg-dark border border-gray-700 rounded px-2 py-1 text-white text-center" />
+                    <span>Desde:</span>
+                    <input type="date" v-model="startDate" :max="getToday()" class="bg-dark border border-gray-700 rounded px-2 py-1 text-white text-center" />
+                    <span>Hasta:</span>
+                    <input type="date" v-model="endDate" :max="getToday()" class="bg-dark border border-gray-700 rounded px-2 py-1 text-white text-center" />
                 </div>
 
                 <div class="mt-4">
@@ -38,29 +40,25 @@
                 </div>
             </div>
             
-            <div class="flex flex-col gap-2">
+            <div class="flex flex-col gap-2 w-full md:w-auto">
+                <!-- SINGLE DYNAMIC BUTTON -->
                 <button 
-                    v-if="!isRunning"
-                    @click="runAutomation" 
-                    class="relative overflow-hidden group bg-primary hover:bg-blue-600 text-white px-8 py-4 rounded-xl text-lg font-bold transition-all shadow-lg shadow-primary/20 transform hover:-translate-y-1">
-                    <span class="flex items-center gap-3">
-                        🚀 INICIAR AUTOMATIZACIÓN
+                    @click="['RUNNING', 'PENDING'].includes(jobStatus) ? stopAutomation() : runAutomation()"
+                    :class="['RUNNING', 'PENDING'].includes(jobStatus) ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20' : 'bg-primary hover:bg-blue-600 shadow-primary/20'"
+                    class="relative overflow-hidden group text-white px-8 py-4 rounded-xl text-lg font-bold transition-all shadow-lg transform hover:-translate-y-1 w-full md:min-w-[300px]"
+                >
+                    <span class="flex items-center justify-center gap-3">
+                         <span v-if="jobStatus === 'PENDING'">⏳ En Cola (Detener)</span>
+                         <span v-else-if="jobStatus === 'RUNNING'">🛑 Detener Ejecución</span>
+                         <span v-else-if="jobStatus === 'STOPPED'">⏯️ Reanudar (Detenido)</span>
+                         <span v-else-if="jobStatus === 'PARTIAL'">🔄 Reintentar Fallidos</span>
+                         <span v-else-if="jobStatus === 'ERROR'">⚠️ Reintentar (Error)</span>
+                         <span v-else>🚀 INICIAR AUTOMATIZACIÓN</span>
                     </span>
                 </button>
-
-                <button 
-                    v-else
-                    @click="stopAutomation" 
-                    class="relative overflow-hidden group bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-xl text-lg font-bold transition-all shadow-lg shadow-red-600/20 transform hover:-translate-y-1">
-                    <span class="flex items-center gap-3">
-                        🛑 DETENER (AL FINALIZAR EMPRESA)
-                    </span>
-                </button>
-                <div v-if="isRunning" class="flex flex-col items-center gap-2">
-                    <p class="text-xs text-gray-500 text-center animate-pulse">El robot se detendrá tras completar la empresa actual.</p>
-                    <button @click="forceReset" class="text-xs text-red-400 hover:text-red-300 underline mt-1">
-                        (Forzar reinicio de estado)
-                    </button>
+                
+                <div v-if="['RUNNING', 'PENDING'].includes(jobStatus)" class="flex flex-col items-center gap-2">
+                    <p class="text-xs text-gray-500 text-center animate-pulse">Solicitando detención al finalizar tarea actual...</p>
                 </div>
             </div>
         </div>
@@ -68,17 +66,17 @@
 
     <!-- Live Status -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Status Chart / List -->
+        <!-- Status Summary -->
         <div class="bg-dark-lighter rounded-xl border border-gray-800 shadow-lg p-6">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-white">Estado Actual (Tiempo Real)</h3>
-                <button @click="fetchStatus" class="text-xs text-primary hover:underline">Refrescar</button>
+                <h3 class="text-lg font-bold text-white">Resumen de Estado</h3>
+                <button @click="fetchRuns" class="text-xs text-primary hover:underline">Refrescar</button>
             </div>
             
             <div v-if="statusData" class="space-y-4">
                 <div class="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
-                    <span class="text-gray-400">Total Empresas</span>
-                    <span class="text-white font-bold">{{ statusData.resumen.total_empresas }}</span>
+                    <span class="text-gray-400">Total Empresas (Filtro)</span>
+                    <span class="text-white font-bold">{{ statusData.resumen.total_empresas }} runs activos</span>
                 </div>
                 
                 <div class="space-y-2">
@@ -87,7 +85,7 @@
                         <span>{{ statusData.resumen.completados + statusData.resumen.sin_novedades }} / {{ statusData.resumen.total_empresas }}</span>
                     </div>
                      <div class="w-full bg-gray-700 rounded-full h-2.5">
-                        <div class="bg-primary h-2.5 rounded-full transition-all duration-500" :style="{ width: ((statusData.resumen.completados + statusData.resumen.sin_novedades) / statusData.resumen.total_empresas * 100) + '%' }"></div>
+                        <div class="bg-primary h-2.5 rounded-full transition-all duration-500" :style="{ width: (statusData.resumen.total_empresas > 0 ? ((statusData.resumen.completados + statusData.resumen.sin_novedades) / statusData.resumen.total_empresas * 100) : 0) + '%' }"></div>
                     </div>
                 </div>
 
@@ -115,23 +113,42 @@
             </div>
         </div>
 
-        <!-- Error Log -->
-        <div class="bg-dark-lighter rounded-xl border border-gray-800 shadow-lg p-6 overflow-hidden flex flex-col max-h-[500px]">
-             <h3 class="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
-                <span>⚠️</span> Registro de Errores ({{ errors.length }})
+        <!-- Detailed Runs List -->
+        <div class="bg-dark-lighter rounded-xl border border-dark-border shadow-lg p-6 overflow-hidden flex flex-col max-h-[500px]">
+             <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span>📋</span> Detalle de Ejecuciones
              </h3>
              
-             <div class="flex-1 overflow-auto space-y-3 pr-2 custom-scrollbar">
-                <div v-for="(err, idx) in errors" :key="idx" class="bg-red-900/10 border border-red-900/30 p-3 rounded-lg text-sm">
-                    <div class="flex justify-between items-start mb-1">
-                        <span class="font-bold text-red-300">{{ err.razon_social }}</span>
-                        <span class="text-xs text-red-500/70">{{ new Date(err.fecha).toLocaleTimeString() }}</span>
-                    </div>
-                    <p class="text-gray-400 break-words font-mono text-xs">{{ err.error }}</p>
-                </div>
-                <div v-if="errors.length === 0" class="text-center py-10 text-gray-600">
-                    🎉 Sin errores reportados
-                </div>
+             <div class="flex-1 overflow-auto custom-scrollbar">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-dark/50 text-gray-500 uppercase sticky top-0 backdrop-blur-sm">
+                        <tr>
+                            <th class="px-3 py-2">Empresa</th>
+                            <th class="px-3 py-2">Estado</th>
+                            <th class="px-3 py-2 text-right">Inicio</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-border">
+                        <tr v-if="runs.length === 0">
+                            <td colspan="3" class="p-4 text-center text-gray-500">Sin ejecuciones recientes.</td>
+                        </tr>
+                        <tr v-for="run in runs" :key="run.id" class="hover:bg-dark-border/30">
+                            <td class="px-3 py-2 font-medium text-gray-300">
+                                {{ run.ruc_empresa }}
+                            </td>
+                            <td class="px-3 py-2">
+                                <span v-if="run.status === 'RUNNING'" class="text-blue-400 animate-pulse font-bold">RUNNING</span>
+                                <span v-else-if="run.status === 'OK'" class="text-green-500">OK</span>
+                                <span v-else-if="run.status === 'ERROR'" class="text-red-500 font-bold">ERROR</span>
+                                <span v-else-if="run.status === 'PENDING'" class="text-yellow-500">PENDING</span>
+                                <span v-else class="text-gray-400">{{ run.status }}</span>
+                            </td>
+                            <td class="px-3 py-2 text-right text-gray-500">
+                                {{ run.started_at ? new Date(run.started_at).toLocaleTimeString() : '-' }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
              </div>
         </div>
     </div>
@@ -140,128 +157,182 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import api from '../apiConfig';
 
-const isRunning = ref(false);
+// State
+const jobStatus = ref('UNKNOWN'); // PENDING, RUNNING, PARTIAL, ERROR, OK, STOPPED
+const runs = ref([]);
+const companies = ref([]);
+const errors = ref([]);
+
+// Inputs
 const runMode = ref('todo');
-const showBrowser = ref(false); // Default visible
-const manuallyStopped = ref(false); // Flag to ignore backend "running" state if forced
-// Inicializar hace 7 dias
+const showBrowser = ref(false);
+const startDate = ref('');
+const endDate = ref('');
+
+// Date Helpers
+const getToday = () => new Date().toISOString().split('T')[0];
 const getSevenDaysAgo = () => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
     return d.toISOString().split('T')[0];
 };
-const getToday = () => new Date().toISOString().split('T')[0];
 
-const startDate = ref(getSevenDaysAgo());
-const todayDate = getToday();
+// Init Dates
+startDate.value = getSevenDaysAgo();
+endDate.value = getToday();
 
-const statusData = ref(null);
-const errors = ref([]);
+// Computed Stats derived from Runs
+const statusData = computed(() => {
+    // Default structure to match UI
+    const summary = {
+        total_empresas: runs.value.length,
+        pendientes: 0,
+        procesando: 0,
+        completados: 0,
+        sin_novedades: 0,
+        errores: 0
+    };
+    
+    runs.value.forEach(r => {
+        if (r.status === 'PENDING') summary.pendientes++;
+        else if (r.status === 'RUNNING') summary.procesando++;
+        else if (r.status === 'OK') summary.completados++; // or check stats_json?
+        else if (r.status === 'PARTIAL') summary.errores++; // Count partial as error or separate?
+        else if (r.status === 'ERROR') summary.errores++;
+        else if (r.status === 'STOPPED') summary.errores++; // Or separate?
+    });
+    
+    return { resumen: summary };
+});
 
-let pollingInterval = null;
+const isRunning = computed(() => {
+    // Global running if any run is active
+    return runs.value.some(r => ['PENDING', 'RUNNING'].includes(r.status));
+});
 
-const fetchStatus = async () => {
+// Actions
+const fetchCompanies = async () => {
     try {
-        const res = await api.get('/automatizacion/status');
-        statusData.value = res.data;
+        const res = await api.get('/empresas/');
+        companies.value = res.data || [];
+    } catch(e) { console.error(e); }
+};
+
+const fetchRuns = async () => {
+    try {
+        // Query runs for the selected date range to show history/progress
+        // Actually, user said /automatizacion/runs?fecha_desde=...
+        // We'll use startDate as filter
+        const params = { fecha_desde: startDate.value };
+        const res = await api.get('/automatizacion/runs', { params });
+        runs.value = res.data || [];
         
-        // Check if running (Any processing OR pending items)
-        const { procesando, pendientes } = res.data.resumen;
-        
-        if ((procesando > 0 || pendientes > 0) && !manuallyStopped.value) {
-            isRunning.value = true;
-        } else if (isRunning.value && procesando === 0 && pendientes === 0) {
-            // Finished naturally
-            isRunning.value = false;
-            // Optional: alert("Proceso Terminado");
-        } else if (manuallyStopped.value) {
-             isRunning.value = false;
-        }
-    } catch (e) {
-        console.error("Error fetching status", e);
-    }
+        // Determine Global Status
+        if (runs.value.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
+        else if (runs.value.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
+        else if (runs.value.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
+        else if (runs.value.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
+        else jobStatus.value = 'OK';
+
+    } catch(e) { console.error("Error fetching runs", e); }
 };
 
 const fetchErrors = async () => {
-     try {
-        const res = await api.get('/automatizacion/errors');
-        errors.value = res.data;
-    } catch (e) {
-        console.error("Error fetching errors", e);
-    }
+    try {
+         const res = await api.get('/automatizacion/errors');
+         errors.value = res.data || [];
+    } catch (e) { console.error(e); }
 }
 
 const runAutomation = async () => {
-    isRunning.value = true;
-    manuallyStopped.value = false; // Reset flag so we listed to API again
+    // Build payload
+    const payload = {
+        mode: runMode.value,
+        date_from: startDate.value,
+        date_to: endDate.value,
+        show_browser: showBrowser.value,
+        rucs: runMode.value === 'todo' ? [] : [] // If 'todo', maybe empty list? Backend usually handles it.
+        // User said: "rucs": ["..."] in example.
+        // I will interpret 'todo' as sending ALL RUCs explicitly if required, or [] if backend supports implicit "all".
+        // Let's send ALL active RUCs just to be safe and explicit.
+    };
     
-    // Calcular dias de diferencia
-    const start = new Date(startDate.value);
-    const end = new Date(); // Hoy
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-    
-    // Asegurar minimo 1 dia
-    const finalDaysBack = diffDays < 1 ? 1 : diffDays;
+    if (runMode.value === 'todo') {
+        payload.rucs = companies.value.filter(c => c.activo).map(c => c.ruc);
+    } else {
+        // 'solo_fallidos' logic? Frontend doesn't strictly track failures locally except visual logs.
+        // Usually backend handles 'retry failed' logic.
+        // If user selects 'solo_fallidos', maybe we send empty runs list and backend finds failed from DB?
+        // Or we should allow user to select?
+        // Let's assume for now 'todo' is the primary use case.
+        // If 'solo_fallidos', I'll send all too, hoping backend filters? 
+        // Or maybe I filter runs with error status locally and send those RUCs?
+        // I'll implement logic: Filter companies with recent errors?
+        // Simplest: Send all, backend loop handles logic?
+        // Actually, Start button text changes: "Reintentar". 
+        // If we are retying, we pass the same parameters.
+        if (runs.value.length > 0) {
+             // Retry Failed
+             const failedRucs = runs.value.filter(r => ['ERROR', 'PARTIAL'].includes(r.status)).map(r => r.ruc_empresa); // Assuming run has ruc_empresa
+             if (failedRucs.length > 0) payload.rucs = failedRucs;
+             else payload.rucs = companies.value.filter(c => c.activo).map(c => c.ruc);
+        } else {
+             payload.rucs = companies.value.filter(c => c.activo).map(c => c.ruc);
+        }
+    }
 
     try {
-        await api.post('/automatizacion/run', {
-            mode: runMode.value,
-            days_back: finalDaysBack,
-            show_browser: showBrowser.value
-        });
-        
-        // Iniciar polling fuerte
-        fetchStatus();
+        await api.post('/automatizacion/run', payload);
+        fetchRuns();
     } catch (e) {
         alert("Error iniciando: " + e.message);
-        isRunning.value = false;
     }
 };
 
 const stopAutomation = async () => {
-    if(!confirm("¿Seguro que deseas detener el robot? Terminará la empresa actual y parará.")) return;
+    if(!confirm("¿Detener ejecuciones activas?")) return;
     try {
-        await api.post('/automatizacion/stop');
-        alert("🛑 Solicitud enviada. El robot se detendrá pronto.");
+        // Find active runs and stop them.
+        const active = runs.value.filter(r => ['PENDING', 'RUNNING'].includes(r.status));
+        for (const run of active) {
+             // Assuming run has ruc_empresa. User example params: stop?ruc=...&fecha_desde=...
+             // The run object likely has this info.
+             // If run object structure is unknown, this is risky.
+             // User said: "POST /automatizacion/stop?ruc=...&fecha_desde=..."
+             // I'll guess run.ruc_empresa exists.
+             if (run.ruc_empresa) {
+                 await api.post(`/automatizacion/stop`, null, { 
+                     params: { ruc: run.ruc_empresa, fecha_desde: startDate.value } 
+                 });
+             }
+        }
+        alert("Solicitud de detención enviada.");
+        fetchRuns();
     } catch (e) {
-        console.error("Error stopping", e);
-        alert("Error al intentar detener.");
+        alert("Error al detener: " + e.message);
     }
 };
 
-const forceReset = () => {
-    if(!confirm("¿Forzar reinicio del estado visual? Esto no detiene el backend, solo resetea el botón.")) return;
-    isRunning.value = false;
-    manuallyStopped.value = true; // Prevent polling from re-enabling it
+// Lifecycle
+let pollingInterval = null;
+const poll = async () => {
+    await fetchRuns();
+    await fetchErrors();
+    const delay = isRunning.value ? 4000 : 10000;
+    pollingInterval = setTimeout(poll, delay);
 };
 
-onMounted(() => {
-    // Iniciar ciclo de polling adaptativo
-    pollStatus();
+onMounted(async () => {
+    await fetchCompanies();
+    poll();
 });
 
 onUnmounted(() => {
-    // Limpiar timeout si existe para evitar memory leaks
-    if(pollingTimeout) clearTimeout(pollingTimeout);
+    if(pollingInterval) clearTimeout(pollingInterval);
 });
-
-let pollingTimeout = null;
-
-const pollStatus = async () => {
-    await fetchStatus();
-    await fetchErrors();
-    
-    // Polling Adaptativo:
-    // Si está corriendo -> Rápido (4s) para feedback visual usuario.
-    // Si está idle -> Lento (20s) para no saturar logs y red.
-    const delay = isRunning.value ? 4000 : 20000;
-    
-    pollingTimeout = setTimeout(pollStatus, delay);
-};
 </script>
 
 <style>

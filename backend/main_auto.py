@@ -1,7 +1,8 @@
 import os
 import time
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from typing import Optional, List, Callable
 from sqlalchemy import or_
 from playwright.sync_api import sync_playwright
 from core.database import SessionLocal, Empresa, Notificacion
@@ -21,7 +22,15 @@ def request_stop():
     STOP_REQUESTED = True
     print("🛑 Solicitud de detención recibida. El robot se detendrá al terminar la empresa actual.")
 
-def run_automation_process(retry_mode: bool = False, days_back: int = 90, headless: bool = False):
+def run_automation_process(
+    retry_mode: bool = False,
+    days_back: int = 90,
+    headless: bool = False,
+    rucs: Optional[List[str]] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    stop_checker: Optional[Callable[[], bool]] = None,
+):
     """
     Función principal de automatización invocable desde API o CLI.
     retry_mode=True: "Modo Continuar/Completar Hoy".
@@ -45,6 +54,8 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
     print(f"📋 Iniciando automatización [Modo Reintento: {retry_mode}, Días: {days_back}, Headless: {headless}]")
     
     query = db.query(Empresa).filter(Empresa.activo == True)
+    if rucs:
+        query = query.filter(Empresa.ruc.in_(rucs))
     
     if retry_mode:
         # Lógica Inteligente:
@@ -72,6 +83,9 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
 
     print(f"🚀 Iniciando procesamiento de {len(empresas)} empresas...\n")
 
+    run_stats = []
+    stop_requested = False
+
     with sync_playwright() as p:
         # Lanzar navegador con argumentos anti-bot
         browser = p.chromium.launch(
@@ -89,7 +103,8 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
 
         for emp in empresas:
             # Check Stop
-            if STOP_REQUESTED:
+            if STOP_REQUESTED or (stop_checker and stop_checker()):
+                stop_requested = True
                 print("\n🛑 DETENIENDO AUTOMATIZACIÓN POR SOLICITUD DE USUARIO.")
                 break
 
@@ -177,10 +192,21 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
                     print("⚠️ No encontré mensajes en la lista.")
                     emp.last_run_status = 'SIN_NOVEDADES'
                     db.commit()
+                    run_stats.append({
+                        "ruc": emp.ruc,
+                        "descargas_ok": 0,
+                        "skipped": 0,
+                        "errors": 0,
+                        "analizados": 0,
+                        "sin_novedades": True,
+                    })
                 else:
                     # Parametros de Filtro usando el argumento days_back
-                    DIAS_ATRAS = days_back
-                    fecha_limite = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=DIAS_ATRAS)
+                    if date_from:
+                        fecha_limite = datetime.combine(date_from, datetime.min.time())
+                    else:
+                        DIAS_ATRAS = days_back
+                        fecha_limite = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=DIAS_ATRAS)
                     print(f"📅 Filtro activo: Mensajes posteriores a {fecha_limite.strftime('%d/%m/%Y')}")
 
                     download_dir = get_smart_download_path(emp.razon_social)
@@ -191,12 +217,18 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
                     max_scan = min(50, len(mensajes))
                     
                     descargas_ok = 0
+                    skipped = 0
+                    errors = 0
                     last_link_fingerprint = None
                     mensajes_nuevos_encontrados = False
                     
                     print(f"⬇️ Analizando hasta {max_scan} mensajes recientes...")
 
                     for i in range(max_scan):
+                        if STOP_REQUESTED or (stop_checker and stop_checker()):
+                            stop_requested = True
+                            print("🛑 Detención solicitada. Cortando procesamiento de mensajes.")
+                            break
                         try:
                             # 1. Extraer Metadata
                             metadata = extract_message_metadata(buzon, i)
@@ -242,6 +274,7 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
                             existe = db.query(Notificacion).filter(Notificacion.codigo_notificacion == hash_id).first()
                             if existe:
                                 print(f"   ⏭️  Saltando mensaje {i+1} (Ya existe en BD: {hash_id[:8]}...)")
+                                skipped += 1
                                 continue
 
                             # Intentos de click y descarga (Retry Loop)
@@ -295,15 +328,19 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
 
                             if not saved_path:
                                 print(f"   ❌ No se pudo descargar mensaje {i+1} tras {max_retries} intentos.")
+                                errors += 1
 
                             page.wait_for_timeout(800)
                         except Exception as e:
                             print(f"   ⚠️ Error procesando mensaje {i+1}: {e}")
+                            errors += 1
 
                     print(f"🏁 Resultado: {descargas_ok}/{max_scan} items analizados.")
                     
                     # Actualizar Estado Final
-                    if descargas_ok > 0:
+                    if stop_requested:
+                        emp.last_run_status = 'INCOMPLETO'
+                    elif descargas_ok > 0:
                         emp.last_run_status = 'COMPLETADO'
                     else:
                         # Si no descargamos nada, pudo ser porque todos ya existían (skip) o porque falló todo.
@@ -315,6 +352,14 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
                         emp.last_run_status = 'SIN_NOVEDADES'
                     
                     db.commit()
+                    run_stats.append({
+                        "ruc": emp.ruc,
+                        "descargas_ok": descargas_ok,
+                        "skipped": skipped,
+                        "errors": errors,
+                        "analizados": max_scan,
+                        "sin_novedades": descargas_ok == 0 and not stop_requested,
+                    })
 
             except Exception as e:
                 print(f"🔥 Error Crítico en empresa {emp.ruc}: {e}")
@@ -333,6 +378,7 @@ def run_automation_process(retry_mode: bool = False, days_back: int = 90, headle
         browser.close()
     
     db.close()
+    return {"stopped": stop_requested, "items": run_stats}
 
 if __name__ == "__main__":
     run_automation_process(retry_mode=False, days_back=3000)
