@@ -534,27 +534,45 @@ const startPolling = () => {
             
             // If response is strict empty array, clear everything
             if (Array.isArray(data)) {
-                 // Map active runs to our list
-                 // The backend returns details for these runs, so we can also check status
-                 const backendRucs = data.map(r => r.ruc_empresa);
+                 // Filter by Current Period & Deduplicate
+                 const currentPeriod = config.value.periodo; // String usually
+                 
+                 // Normalize comparisons (ensure both string or both int if needed, but safe to assume string matches)
+                 // Also handle runs that might not have 'periodo' if schema is loose (strict check preference)
+                 const periodRuns = data.filter(r => String(r.periodo) === String(currentPeriod));
+                 
+                 const backendRucs = [...new Set(periodRuns.map(r => r.ruc_empresa))];
                  
                  // Sync activeDownloads
                  activeDownloads.value = backendRucs;
 
-                 // Determine Global Status
-                 if (data.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
-                 else if (data.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
-                 else if (data.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
-                 else if (data.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
-                 else if (data.length > 0 && data.every(r => ['OK', 'STOPPED'].includes(r.status))) jobStatus.value = 'OK'; // or STOPPED
-                 else jobStatus.value = 'STOPPED'; // Default if list exists but no active?
+                 // Determine Global Status (Based on filtered period runs?)
+                 // Actually, if we filter runs, we calculate status based on what we see.
+                 // But the 'jobStatus' might be global for the worker. 
+                 // User wants visual consistency: "If I see 2/2 done, it's done".
+                 // So we calculate status from 'periodRuns'.
 
-                 // Use STOPPED if any are stopped and none running/pending?
-                 const anyRunning = data.some(r => ['RUNNING', 'PENDING'].includes(r.status));
-                 if (!anyRunning && data.some(r => r.status === 'STOPPED')) jobStatus.value = 'STOPPED';
+                 if (periodRuns.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
+                 else if (periodRuns.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
+                 else if (periodRuns.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
+                 else if (periodRuns.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
+                 else if (periodRuns.length > 0 && periodRuns.every(r => ['OK', 'STOPPED'].includes(r.status))) jobStatus.value = 'OK'; 
+                 else jobStatus.value = 'STOPPED';
+
+                 const anyRunning = periodRuns.some(r => ['RUNNING', 'PENDING'].includes(r.status));
+                 if (!anyRunning && periodRuns.some(r => r.status === 'STOPPED')) jobStatus.value = 'STOPPED';
                  
-                 // Special Case: Empty List -> IDLE/UNKNOWN
-                 if (data.length === 0) jobStatus.value = 'UNKNOWN';
+                 if (periodRuns.length === 0) jobStatus.value = 'UNKNOWN';
+
+                 // Intelligent Completion Override:
+                 // If we have active downloads, and ALL of them are marked as completed locally (via progress poll),
+                 // we force visual status to OK to hide the Stop button faster.
+                 if (activeDownloads.value.length > 0) {
+                     const allCompletedLocally = activeDownloads.value.every(ruc => progressList.value[ruc]?.isCompleted);
+                     if (allCompletedLocally) {
+                         jobStatus.value = 'OK';
+                     }
+                 }
 
             } else {
                  console.warn("Unexpected runs format", data);

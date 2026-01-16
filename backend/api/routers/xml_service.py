@@ -48,6 +48,13 @@ def run_xml(req: schemas.XMLRunRequest):
                 .first()
             )
             if existing:
+                if existing.status == "PENDING":
+                    stats = existing.stats_json or {}
+                    if req.limit is not None:
+                        stats["limit"] = req.limit
+                    stats["headless"] = req.headless
+                    existing.stats_json = stats
+                    db.add(existing)
                 processed.append(ruc)
                 continue
 

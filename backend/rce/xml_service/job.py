@@ -126,6 +126,8 @@ def run_xml_job_for_empresa_periodo(
     not_found_count = 0
     auth_count = 0
     stopped = False
+    limit_reached = False
+    processed_count = 0
     try:
         ok_login = scraper.login_and_navigate(emp_ruc, emp_usuario, emp_clave)
         if not ok_login:
@@ -152,6 +154,7 @@ def run_xml_job_for_empresa_periodo(
                     ev.attempt_count = MAX_ATTEMPTS_PER_ITEM
                     db.commit()
                     not_found_count += 1
+                    processed_count += 1
                     print(f"⏭️ SERVICIOS item_id={item['id']} tipo_cp=14 marcado NOT_FOUND")
                     continue
 
@@ -204,6 +207,7 @@ def run_xml_job_for_empresa_periodo(
                         print(f"⚠️ Detalle no extraído item_id={item['id']}: {e}")
                     db.commit()
                     ok_count += 1
+                    processed_count += 1
                     print(f"✅ OK item_id={item['id']} xml={result.xml_path}")
                 else:
                     status = "AUTH" if result.auth_error else "ERROR"
@@ -219,6 +223,7 @@ def run_xml_job_for_empresa_periodo(
                         auth_count += 1
                     else:
                         error_count += 1
+                    processed_count += 1
                     print(f"❌ {status} item_id={item['id']} err={result.error}")
 
                     # si fue AUTH, podrías relogin inmediato:
@@ -233,6 +238,10 @@ def run_xml_job_for_empresa_periodo(
 
             # pequeña pausa para no matar UI
             time.sleep(0.8)
+            if limit is not None and processed_count >= limit:
+                limit_reached = True
+                print(f"⏹️ Límite alcanzado ({limit}). Deteniendo empresa {emp_ruc} periodo {periodo}.")
+                break
 
     finally:
         scraper.stop()
@@ -252,6 +261,8 @@ def run_xml_job_for_empresa_periodo(
                         "error": error_count,
                         "auth": auth_count,
                         "not_found": not_found_count,
+                        "limit": limit,
+                        "limit_reached": limit_reached,
                     }
                     if status == "STOPPED":
                         run.error_message = "Detenido por el usuario"
