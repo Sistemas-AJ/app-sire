@@ -170,7 +170,8 @@
                         <div class="flex justify-between items-start mb-2 relative z-10">
                              <div class="min-w-0 pr-2">
                                 <h4 class="text-gray-300 font-bold text-xs truncate">{{ getCompanyName(ruc) }}</h4>
-                                <span class="text-[10px] text-gray-500 font-mono">{{ ruc }}</span>
+                                <span class="text-[10px] text-gray-500 font-mono block">{{ ruc }}</span>
+                                <span class="text-[9px] text-gray-600 font-mono block">Periodo Run: {{ getRunPeriod(ruc) }}</span>
                             </div>
                             <!-- Status Badge -->
                             <span v-if="getProgress(ruc).isCompleted" class="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded border border-green-800 shadow-sm shadow-green-900/20 whitespace-nowrap">COMPLETADO</span>
@@ -372,6 +373,10 @@ const detailData = ref(null);
 // Persistence Constants
 const STORAGE_KEY = 'xml_download_state';
 
+// Metadata for cards
+const runMetadata = ref({});
+const getRunPeriod = (ruc) => runMetadata.value[ruc]?.periodo || 'N/A';
+
 // --- Computed Stats ---
 const getProgress = (ruc) => progressList.value[ruc] || { percentage: 0, processedItems: 0, total_items: 0, ok: 0, error: 0, isCompleted: false };
 
@@ -537,21 +542,20 @@ const startPolling = () => {
                  // Filter by Current Period & Deduplicate
                  const currentPeriod = config.value.periodo; // String usually
                  
-                 // Normalize comparisons (ensure both string or both int if needed, but safe to assume string matches)
-                 // Also handle runs that might not have 'periodo' if schema is loose (strict check preference)
+                 // Normalize comparisons
                  const periodRuns = data.filter(r => String(r.periodo) === String(currentPeriod));
                  
-                 const backendRucs = [...new Set(periodRuns.map(r => r.ruc_empresa))];
+                 const backendRucs = [...new Set(periodRuns.map(r => r.ruc_empresa))]; // Unique RUCs
                  
                  // Sync activeDownloads
                  activeDownloads.value = backendRucs;
+                 
+                 // Store run metadata for sorting/display
+                 periodRuns.forEach(r => {
+                     runMetadata.value[r.ruc_empresa] = r;
+                 });
 
                  // Determine Global Status (Based on filtered period runs?)
-                 // Actually, if we filter runs, we calculate status based on what we see.
-                 // But the 'jobStatus' might be global for the worker. 
-                 // User wants visual consistency: "If I see 2/2 done, it's done".
-                 // So we calculate status from 'periodRuns'.
-
                  if (periodRuns.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
                  else if (periodRuns.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
                  else if (periodRuns.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
@@ -564,9 +568,7 @@ const startPolling = () => {
                  
                  if (periodRuns.length === 0) jobStatus.value = 'UNKNOWN';
 
-                 // Intelligent Completion Override:
-                 // If we have active downloads, and ALL of them are marked as completed locally (via progress poll),
-                 // we force visual status to OK to hide the Stop button faster.
+                 // Intelligent Completion Override
                  if (activeDownloads.value.length > 0) {
                      const allCompletedLocally = activeDownloads.value.every(ruc => progressList.value[ruc]?.isCompleted);
                      if (allCompletedLocally) {
@@ -576,14 +578,12 @@ const startPolling = () => {
 
             } else {
                  console.warn("Unexpected runs format", data);
-                 // Fallback? Or clear?
                  activeDownloads.value = [];
             }
 
         } catch(e) { console.error("Error checking runs", e); }
-
-        // Poll Progress for individual companies (Only what's in activeDownloads)
-        // We still fetch detailed progress because runs might not have 'total_items' or real-time 'remaining' in the main list yet
+        
+        // ... (rest of polling loop)
         for (const ruc of activeDownloads.value) {
             try {
                 const res = await api.get('/xml/progress', { params: { ruc, periodo: config.value.periodo } });

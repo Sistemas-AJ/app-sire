@@ -43,18 +43,19 @@ def run_xml(req: schemas.XMLRunRequest):
                     RCERun.modulo == "XML",
                     RCERun.ruc_empresa == ruc,
                     RCERun.periodo == req.periodo,
-                    RCERun.status.in_(["PENDING", "RUNNING"]),
+                    RCERun.status.in_(["PENDING", "RUNNING", "ERROR", "PARTIAL", "STOPPED"]),
                 )
                 .first()
             )
             if existing:
-                if existing.status == "PENDING":
-                    stats = existing.stats_json or {}
-                    if req.limit is not None:
-                        stats["limit"] = req.limit
-                    stats["headless"] = req.headless
-                    existing.stats_json = stats
-                    db.add(existing)
+                stats = existing.stats_json or {}
+                if req.limit is not None:
+                    stats["limit"] = req.limit
+                stats["headless"] = req.headless
+                existing.stats_json = stats
+                if existing.status in ["ERROR", "PARTIAL", "STOPPED"]:
+                    existing.status = "PENDING"
+                db.add(existing)
                 processed.append(ruc)
                 continue
 
