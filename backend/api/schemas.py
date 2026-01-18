@@ -257,6 +257,7 @@ class BuzonRunItem(BaseModel):
     retry_mode: Optional[str] = None
     headless: bool
     stop_requested: bool
+    queued: bool
     stats_json: Optional[Any] = None
     last_error: Optional[str] = None
     created_at: datetime

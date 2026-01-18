@@ -50,7 +50,7 @@
                     <span class="flex items-center justify-center gap-3">
                          <span v-if="jobStatus === 'PENDING'">⏳ En Cola (Detener)</span>
                          <span v-else-if="jobStatus === 'RUNNING'">🛑 Detener Ejecución</span>
-                         <span v-else-if="jobStatus === 'STOPPED'">⏯️ Reanudar (Detenido)</span>
+                         <span v-else-if="jobStatus === 'STOPPED'">⏯️ REANUDAR EJECUCIÓN</span>
                          <span v-else-if="jobStatus === 'PARTIAL'">🔄 Reintentar Fallidos</span>
                          <span v-else-if="jobStatus === 'ERROR'">⚠️ Reintentar (Error)</span>
                          <span v-else>🚀 INICIAR AUTOMATIZACIÓN</span>
@@ -139,10 +139,12 @@
                                 <div class="text-[10px] text-gray-500 font-mono">{{ run.ruc_empresa }}</div>
                             </td>
                             <td class="px-3 py-2">
-                                <span v-if="run.status === 'RUNNING'" class="text-blue-400 animate-pulse font-bold">RUNNING</span>
-                                <span v-else-if="run.status === 'OK'" class="text-green-500">OK</span>
-                                <span v-else-if="run.status === 'ERROR'" class="text-red-500 font-bold">ERROR</span>
-                                <span v-else-if="run.status === 'PENDING'" class="text-yellow-500">PENDING</span>
+                                <span v-if="run.status === 'RUNNING'" class="text-blue-400 animate-pulse font-bold">EJECUTANDO...</span>
+                                <span v-else-if="run.status === 'PENDING' && run.queued" class="text-purple-400 font-bold">EN COLA</span>
+                                <span v-else-if="run.status === 'PENDING'" class="text-gray-500">PENDIENTE</span>
+                                <span v-else-if="run.status === 'OK'" class="text-green-500 font-bold">COMPLETADO</span>
+                                <span v-else-if="['ERROR', 'PARTIAL'].includes(run.status)" class="text-red-500 font-bold">ERROR</span>
+                                <span v-else-if="run.status === 'STOPPED'" class="text-yellow-500 font-bold">DETENIDO</span>
                                 <span v-else class="text-gray-400">{{ run.status }}</span>
                             </td>
                             <td class="px-3 py-2 text-right text-gray-500">
@@ -231,11 +233,27 @@ const fetchRuns = async () => {
         }
         
         // Determine Global Status
-        if (runs.value.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
-        else if (runs.value.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
-        else if (runs.value.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
-        else if (runs.value.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
-        else jobStatus.value = 'OK';
+        // Determine Global Status
+        if (runs.value.some(r => r.status === 'RUNNING')) {
+            jobStatus.value = 'RUNNING';
+        } else if (runs.value.some(r => r.status === 'PENDING' && r.queued)) {
+            // Only consider it "Active PENDING" (En Cola) if queued is true
+            jobStatus.value = 'PENDING';
+        } else if (runs.value.some(r => r.status === 'PENDING')) {
+             // Pending but NOT queued -> Ready to Start
+             jobStatus.value = 'IDLE';
+        } else if (runs.value.some(r => r.status === 'ERROR')) {
+            jobStatus.value = 'ERROR';
+        } else if (runs.value.some(r => r.status === 'PARTIAL')) {
+            jobStatus.value = 'PARTIAL';
+        } else if (runs.value.some(r => r.status === 'STOPPED')) {
+            jobStatus.value = 'STOPPED';
+        } else {
+            // If everything is OK, or empty
+            const allOk = runs.value.length > 0 && runs.value.every(r => r.status === 'OK');
+            if (allOk) jobStatus.value = 'OK';
+            else jobStatus.value = 'IDLE'; 
+        }
         
         if (!['RUNNING', 'PENDING'].includes(jobStatus.value)) {
             isStopping.value = false;

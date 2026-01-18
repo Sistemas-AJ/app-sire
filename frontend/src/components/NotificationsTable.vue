@@ -1,14 +1,32 @@
 <template>
   <div class="bg-dark-lighter rounded-lg border border-dark-border overflow-hidden">
     <!-- Header -->
-    <div class="p-4 border-b border-dark-border flex justify-between items-center">
+    <div class="p-4 border-b border-dark-border flex flex-col sm:flex-row justify-between items-center gap-4">
       <h2 class="text-lg font-bold text-white">Últimas Notificaciones</h2>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500">Desde:</span>
+            <input 
+              v-model="startDate"
+              @change="fetchNotifications"
+              type="date" 
+              class="bg-dark border border-dark-border text-xs text-white rounded px-2 py-1.5 focus:outline-none focus:border-primary"
+            >
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500">Hasta:</span>
+            <input 
+              v-model="endDate"
+              @change="fetchNotifications"
+              type="date" 
+              class="bg-dark border border-dark-border text-xs text-white rounded px-2 py-1.5 focus:outline-none focus:border-primary"
+            >
+        </div>
         <input 
           v-model="search"
           type="text" 
-          placeholder="Buscar por RUC o Razón Social..." 
-          class="bg-dark border border-dark-border text-sm text-white rounded px-3 py-1.5 focus:outline-none focus:border-primary w-64"
+          placeholder="Buscar company..." 
+          class="bg-dark border border-dark-border text-sm text-white rounded px-3 py-1.5 focus:outline-none focus:border-primary w-48"
         >
       </div>
     </div>

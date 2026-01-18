@@ -107,6 +107,7 @@ class BuzonRun(Base):
     retry_mode = Column(String(20), nullable=True)  # todo/pendientes/solo_fallidos
     headless = Column(Boolean, default=True)
     stop_requested = Column(Boolean, default=False)
+    queued = Column(Boolean, default=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     started_at = Column(DateTime(timezone=True), nullable=True)

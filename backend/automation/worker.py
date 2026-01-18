@@ -38,6 +38,7 @@ def _ensure_daily_runs(db, today: date):
             status="PENDING",
             retry_mode="todo",
             headless=True,
+            queued=False,
         )
         db.add(run)
     db.commit()
@@ -46,7 +47,7 @@ def _ensure_daily_runs(db, today: date):
 def _pick_next_run(db):
     return (
         db.query(BuzonRun)
-        .filter(BuzonRun.status.in_(RUN_STATUSES))
+        .filter(BuzonRun.status.in_(RUN_STATUSES), BuzonRun.queued == True)
         .order_by(BuzonRun.id.asc())
         .with_for_update(skip_locked=True)
         .first()

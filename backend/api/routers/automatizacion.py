@@ -53,11 +53,20 @@ async def run_automation(req: schemas.AutomationRunRequest, db: Session = Depend
         existing = db.query(BuzonRun).filter(
             BuzonRun.ruc_empresa == emp.ruc,
             BuzonRun.fecha_desde == fecha_desde,
-            BuzonRun.status.in_(["PENDING", "RUNNING"])
         ).first()
         if existing:
-            errors.append(f"{emp.ruc}: ya existe un run pendiente/en ejecución para esa fecha.")
+            if existing.status == "RUNNING":
+                errors.append(f"{emp.ruc}: ya existe un run en ejecución para esa fecha.")
+                continue
+            existing.status = "PENDING"
+            existing.retry_mode = req.mode
+            existing.headless = headless
+            existing.queued = True
+            existing.stop_requested = False
+            db.add(existing)
+            runs.append(existing)
             continue
+
         run = BuzonRun(
             ruc_empresa=emp.ruc,
             fecha_desde=fecha_desde,
@@ -65,6 +74,7 @@ async def run_automation(req: schemas.AutomationRunRequest, db: Session = Depend
             status="PENDING",
             retry_mode=req.mode,
             headless=headless,
+            queued=True,
         )
         db.add(run)
         db.flush()
@@ -128,12 +138,13 @@ def get_status(db: Session = Depends(get_db)):
     """
     Retorna el estado actual de las empresas (Simulando 'History' de la última corrida).
     """
+    today = datetime.now().date()
     total = db.query(Empresa).filter(Empresa.activo == True).count()
-    pendientes = db.query(Empresa).filter(Empresa.last_run_status == 'PENDIENTE', Empresa.activo == True).count()
-    procesando = db.query(Empresa).filter(Empresa.last_run_status == 'PROCESANDO', Empresa.activo == True).count()
-    completados = db.query(Empresa).filter(Empresa.last_run_status == 'COMPLETADO', Empresa.activo == True).count()
-    sin_novedades = db.query(Empresa).filter(Empresa.last_run_status == 'SIN_NOVEDADES', Empresa.activo == True).count()
-    errores = db.query(Empresa).filter(Empresa.last_run_status == 'ERROR', Empresa.activo == True).count()
+    pendientes = db.query(BuzonRun).filter(BuzonRun.fecha_desde == today, BuzonRun.status == "PENDING").count()
+    procesando = db.query(BuzonRun).filter(BuzonRun.fecha_desde == today, BuzonRun.status == "RUNNING").count()
+    completados = db.query(BuzonRun).filter(BuzonRun.fecha_desde == today, BuzonRun.status == "OK").count()
+    sin_novedades = db.query(BuzonRun).filter(BuzonRun.fecha_desde == today, BuzonRun.status == "OK").count()
+    errores = db.query(BuzonRun).filter(BuzonRun.fecha_desde == today, BuzonRun.status.in_(["ERROR", "PARTIAL"])).count()
     
     return {
         "resumen": {
