@@ -17,10 +17,12 @@ from core.database import (
     CPEDetalle,
 )
 from api import schemas
+from api.routers.auth import get_current_user
 
 router = APIRouter(
     prefix="/empresas",
-    tags=["empresas"]
+    tags=["empresas"],
+    dependencies=[Depends(get_current_user)],
 )
 
 @router.get("/", response_model=List[schemas.EmpresaResponse])

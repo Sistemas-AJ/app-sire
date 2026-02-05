@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.database import init_db
 from core.config import init_dirs
-from api.routers import empresas, automatizacion, dashboard, files, propuesta, xml_service
+from api.routers import empresas, automatizacion, dashboard, files, propuesta, xml_service, auth
 
 app = FastAPI(title="SUNAT Automation API de Buzones SOL", version="1.0.0")
 
@@ -28,6 +28,7 @@ app.include_router(dashboard.router)
 app.include_router(files.router)
 app.include_router(propuesta.router)
 app.include_router(xml_service.router)
+app.include_router(auth.router)
 
 @app.get("/")
 def root():

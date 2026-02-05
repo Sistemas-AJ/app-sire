@@ -5,12 +5,17 @@ from typing import List, Optional
 
 from core.database import get_db, db_session, Empresa, RCEPropuestaItem, CPEEvidencia, CPEDetalle, RCERun
 from api import schemas
+from api.routers.auth import get_current_user
 from rce.xml_service.job import run_xml_job_for_empresa_periodo, request_stop
 from rce.xml_detail.report import build_reporte_detalle
 from rce.xml_service.repository import fetch_items_pendientes_xml
 
 
-router = APIRouter(prefix="/xml", tags=["xml"])
+router = APIRouter(
+    prefix="/xml",
+    tags=["xml"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("/run", response_model=schemas.XMLRunResponse)

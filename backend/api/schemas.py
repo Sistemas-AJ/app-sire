@@ -287,3 +287,26 @@ class BuzonPeriodSummary(BaseModel):
 class BuzonPeriodsResponse(BaseModel):
     ok: bool
     periods: List[BuzonPeriodSummary] = []
+
+
+class UserCreateRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserLoginResponse(BaseModel):
+    ok: bool
+    token: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    message: Optional[str] = None
+
+
+class UserMeResponse(BaseModel):
+    id: int
+    username: str
+    is_active: bool

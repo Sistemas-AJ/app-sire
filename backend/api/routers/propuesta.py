@@ -4,10 +4,15 @@ from typing import List
 
 from core.database import get_db, db_session, Empresa, EmpresaSire, RCEPropuestaFile, RCEPropuestaItem
 from api import schemas
+from api.routers.auth import get_current_user
 from rce.propuesta.run import procesar_empresa
 
 
-router = APIRouter(prefix="/propuesta", tags=["propuesta"])
+router = APIRouter(
+    prefix="/propuesta",
+    tags=["propuesta"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("/run", response_model=schemas.PropuestaRunResponse)

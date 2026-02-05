@@ -103,8 +103,19 @@
 
     </nav>
 
+    <!-- Logout -->
+    <div class="px-4 py-2 mt-auto border-t border-dark-border">
+      <button 
+        @click="handleLogout"
+        class="w-full flex items-center px-4 py-3 rounded-lg text-text-muted hover:bg-red-500/10 hover:text-red-400 transition-colors group"
+      >
+        <span class="mr-3 group-hover:scale-110 transition-transform">🚪</span>
+        <span class="font-medium">Cerrar Sesión</span>
+      </button>
+    </div>
+
     <!-- Footer -->
-    <div class="p-4 border-t border-dark-border text-xs text-center text-text-muted">
+    <div class="p-4 text-xs text-center text-text-muted">
       &copy; 2026 SUNATBOT
     </div>
   </aside>
@@ -119,6 +130,8 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import api from '../apiConfig';
 
 defineProps({
   isOpen: {
@@ -128,7 +141,7 @@ defineProps({
 });
 
 const emit = defineEmits(['close']);
-
+const router = useRouter();
 const activeGroup = ref('buzones'); // Default open group
 
 const toggleGroup = (group) => {
@@ -138,5 +151,18 @@ const toggleGroup = (group) => {
 const handleNav = (navigate) => {
   navigate();
   emit('close');
+};
+
+const handleLogout = async () => {
+  if(!confirm("¿Cerrar sesión?")) return;
+  
+  try {
+      await api.post('/auth/logout');
+  } catch(e) {
+      console.error("Logout error", e);
+  } finally {
+      localStorage.removeItem('token');
+      router.push('/login');
+  }
 };
 </script>
