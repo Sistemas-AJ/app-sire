@@ -22,6 +22,28 @@
                     </label>
                 </div>
                 
+                <!-- Historic Periods -->
+                <div class="mt-4">
+                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Periodos Anteriores</label>
+                    <select 
+                        v-if="periods.length > 0"
+                        @change="(e) => selectPeriod(periods[e.target.value])"
+                        class="w-full bg-dark border border-gray-700 text-gray-300 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-primary appearance-none cursor-pointer"
+                    >
+                        <option value="" disabled selected>Seleccionar periodo historial...</option>
+                        <option 
+                            v-for="(p, idx) in periods" 
+                            :key="idx" 
+                            :value="idx"
+                        >
+                             {{ p.fecha_desde }} ➜ {{ p.fecha_hasta }} ({{ p.ok }} / {{ p.total }} OK)
+                        </option>
+                    </select>
+                    <div v-else class="text-xs text-gray-500 italic px-2">
+                        No se encontraron periodos registrados.
+                    </div>
+                </div>
+                
                 <div class="flex items-center gap-2 mt-4 text-sm text-gray-400">
                     <span>Desde:</span>
                     <input type="date" v-model="startDate" :max="getToday()" class="bg-dark border border-gray-700 rounded px-2 py-1 text-white text-center" />
@@ -83,10 +105,10 @@
                 <div class="space-y-2">
                     <div class="flex justify-between text-xs text-gray-500 uppercase">
                         <span>Progreso</span>
-                        <span>{{ statusData.resumen.completados + statusData.resumen.sin_novedades }} / {{ statusData.resumen.total_empresas }}</span>
+                        <span>{{ statusData.resumen.completados }} / {{ statusData.resumen.total_empresas }}</span>
                     </div>
                      <div class="w-full bg-gray-700 rounded-full h-2.5">
-                        <div class="bg-primary h-2.5 rounded-full transition-all duration-500" :style="{ width: (statusData.resumen.total_empresas > 0 ? ((statusData.resumen.completados + statusData.resumen.sin_novedades) / statusData.resumen.total_empresas * 100) : 0) + '%' }"></div>
+                        <div class="bg-primary h-2.5 rounded-full transition-all duration-500" :style="{ width: (statusData.resumen.total_empresas > 0 ? (statusData.resumen.completados / statusData.resumen.total_empresas * 100) : 0) + '%' }"></div>
                     </div>
                 </div>
 
@@ -96,7 +118,7 @@
                         <div class="text-xs text-gray-500">Pendientes</div>
                     </div>
                     <div class="text-center p-3 rounded-lg border border-gray-800 bg-gray-800/20">
-                        <div class="text-2xl font-bold text-green-500">{{ statusData.resumen.completados + statusData.resumen.sin_novedades }}</div>
+                        <div class="text-2xl font-bold text-green-500">{{ statusData.resumen.completados }}</div>
                         <div class="text-xs text-gray-500">Completados</div>
                     </div>
                      <div class="text-center p-3 rounded-lg border border-gray-800 bg-gray-800/20">
@@ -136,7 +158,11 @@
                         <tr v-for="run in runs" :key="run.id" class="hover:bg-dark-border/30">
                             <td class="px-3 py-2">
                                 <div class="font-medium text-gray-200">{{ getCompanyName(run.ruc_empresa) }}</div>
-                                <div class="text-[10px] text-gray-500 font-mono">{{ run.ruc_empresa }}</div>
+                                <div class="text-[10px] text-gray-500 font-mono flex items-center gap-2">
+                                    <span>{{ run.ruc_empresa }}</span>
+                                    <span class="text-gray-700">|</span>
+                                    <span>{{ run.fecha_desde }} <span class="text-gray-600">➜</span> {{ run.fecha_hasta }}</span>
+                                </div>
                             </td>
                             <td class="px-3 py-2">
                                 <span v-if="run.status === 'RUNNING'" class="text-blue-400 animate-pulse font-bold">EJECUTANDO...</span>
@@ -171,6 +197,7 @@ const companies = ref([]);
 const errors = ref([]);
 const statusData = ref(null); // Back to ref, populated by API
 const isStopping = ref(false);
+const periods = ref([]); // New
 
 // Inputs
 const runMode = ref('todo');
@@ -184,6 +211,28 @@ const getSevenDaysAgo = () => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
     return d.toISOString().split('T')[0];
+};
+
+// Actions
+const fetchPeriods = async () => {
+    try {
+        const res = await api.get('/automatizacion/periods');
+        console.log("Periods response:", res.data); // Debug
+        if (res.data.ok && Array.isArray(res.data.periods)) {
+            periods.value = res.data.periods;
+        } else {
+             console.warn("Invalid periods response:", res.data);
+        }
+    } catch (e) {
+        console.error("Error fetching periods", e);
+    }
+};
+
+const selectPeriod = (p) => {
+    startDate.value = p.fecha_desde;
+    endDate.value = p.fecha_hasta;
+    fetchRuns(); // Auto refresh
+    fetchSummary();
 };
 
 // Init Dates
@@ -220,17 +269,32 @@ const fetchSummary = async () => {
 
 const fetchRuns = async () => {
     try {
-        const params = { fecha_desde: startDate.value };
+        const params = { 
+            fecha_desde: startDate.value,
+            fecha_hasta: endDate.value 
+        };
         const res = await api.get('/automatizacion/runs', { params });
         
+        let allRuns = [];
         if (Array.isArray(res.data)) {
-            runs.value = res.data;
+            allRuns = res.data;
         } else if (res.data && Array.isArray(res.data.runs)) {
-            runs.value = res.data.runs;
+            allRuns = res.data.runs;
         } else {
             console.warn("Unexpected response format for runs:", res.data);
-            runs.value = [];
         }
+
+        // Strict client-side filtering to ensure UI consistency
+        // We show runs that overlap or match the selected range? 
+        // User said "filtra los que esten en ese rango".
+        // Let's filter runs where the run's start date is >= selected start date
+        // AND run's end date <= selected end date.
+        // This ensures they are fully contained in the view.
+        runs.value = allRuns.filter(r => {
+             return r.fecha_desde >= startDate.value && r.fecha_hasta <= endDate.value;
+        });
+
+
         
         // Determine Global Status
         // Determine Global Status
@@ -352,6 +416,7 @@ const poll = async () => {
 onMounted(async () => {
     isActive = true;
     await fetchCompanies();
+    await fetchPeriods(); // Load initial
     poll();
 });
 

@@ -253,6 +253,10 @@ def run_automation_process(
                                         print(f"   ⚠️ Fecha no parseable: {fecha_str}. Asumiendo 'viejo' para seguridad.")
                                         fecha_msg = datetime(2000, 1, 1) # Muy viejo
 
+                            fecha_msg_date = fecha_msg.date()
+                            if date_to and fecha_msg_date > date_to:
+                                continue
+
                             # Comparación
                             if fecha_msg < fecha_limite:
                                 print(f"   🛑 Mensaje {i+1} es de {fecha_str} (Limit: {fecha_limite.strftime('%d/%m/%Y')}). Deteniendo búsqueda.")

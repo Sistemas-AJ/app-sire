@@ -99,12 +99,13 @@ def run_worker():
             fecha_desde = run.fecha_desde
             fecha_hasta = run.fecha_hasta
             headless = bool(run.headless)
+            retry_mode = run.retry_mode or "todo"
         finally:
             db.close()
 
         try:
             result = main_auto.run_automation_process(
-                retry_mode=False,
+                retry_mode=retry_mode in ("solo_fallidos", "pendientes"),
                 days_back=90,
                 headless=headless,
                 rucs=[ruc],
@@ -123,6 +124,7 @@ def run_worker():
                     continue
                 run.stats_json = totals
                 run.finished_at = datetime.now()
+                run.queued = False
                 if stopped:
                     run.status = "STOPPED"
                 elif totals["errors"] > 0:
@@ -140,6 +142,7 @@ def run_worker():
                     run.status = "ERROR"
                     run.last_error = str(e)
                     run.finished_at = datetime.now()
+                    run.queued = False
                     db.commit()
             finally:
                 db.close()

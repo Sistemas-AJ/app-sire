@@ -271,3 +271,18 @@ class BuzonRunResponse(BaseModel):
     ok: bool
     runs: List[BuzonRunItem] = []
     errors: List[str] = []
+
+class BuzonPeriodSummary(BaseModel):
+    fecha_desde: date
+    fecha_hasta: Optional[date] = None
+    total: int
+    ok: int
+    pending: int
+    running: int
+    stopped: int
+    partial: int
+    error: int
+
+class BuzonPeriodsResponse(BaseModel):
+    ok: bool
+    periods: List[BuzonPeriodSummary] = []
