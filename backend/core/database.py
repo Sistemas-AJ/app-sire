@@ -115,6 +115,7 @@ class BuzonRun(Base):
 
     last_error = Column(Text, nullable=True)
     stats_json = Column(JSON, nullable=True)
+    evidencia_path = Column(Text, nullable=True)
 
     empresa = relationship("Empresa")
 

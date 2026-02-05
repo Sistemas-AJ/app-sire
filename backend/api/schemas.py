@@ -260,6 +260,7 @@ class BuzonRunItem(BaseModel):
     queued: bool
     stats_json: Optional[Any] = None
     last_error: Optional[str] = None
+    evidencia_path: Optional[str] = None
     created_at: datetime
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None

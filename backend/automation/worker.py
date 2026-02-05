@@ -111,6 +111,7 @@ def run_worker():
                 rucs=[ruc],
                 date_from=fecha_desde,
                 date_to=fecha_hasta,
+                run_id=run_id,
                 stop_checker=lambda: _stop_requested(run_id),
             )
             stopped = bool(result.get("stopped"))

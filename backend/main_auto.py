@@ -30,6 +30,7 @@ def run_automation_process(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     stop_checker: Optional[Callable[[], bool]] = None,
+    run_id: Optional[int] = None,
 ):
     """
     Función principal de automatización invocable desde API o CLI.
@@ -57,7 +58,7 @@ def run_automation_process(
     if rucs:
         query = query.filter(Empresa.ruc.in_(rucs))
     
-    if retry_mode:
+    if retry_mode and not rucs:
         # Lógica Inteligente:
         # Incluir si:
         # 1. Status NO es (COMPLETADO o SIN_NOVEDADES)  -> Falló o está pendiente
@@ -79,7 +80,7 @@ def run_automation_process(
     if not empresas:
         print("✅ No hay empresas para procesar (según filtros).")
         db.close()
-        return
+        return {"stopped": False, "items": []}
 
     print(f"🚀 Iniciando procesamiento de {len(empresas)} empresas...\n")
 
@@ -179,6 +180,49 @@ def run_automation_process(
                     continue
                 
                 print("✅ iframeApplication cargado. Buzón listo.")
+
+                try:
+                    try:
+                        buzon.locator("input[type='checkbox']").first.wait_for(state="visible", timeout=10000)
+                    except Exception:
+                        buzon.locator("body").wait_for(state="visible", timeout=5000)
+                    page.wait_for_timeout(1000)
+
+                    period_tag = "sin_periodo"
+                    if date_from and date_to:
+                        period_tag = f"{date_from.strftime('%Y%m%d')}_{date_to.strftime('%Y%m%d')}"
+                    elif date_from:
+                        period_tag = f"{date_from.strftime('%Y%m%d')}_{datetime.now().strftime('%Y%m%d')}"
+                    evidence_dir = os.path.join(os.getcwd(), "downloads", "buzon_evidencias", emp.ruc)
+                    os.makedirs(evidence_dir, exist_ok=True)
+                    evidence_path = os.path.join(evidence_dir, f"buzon_{period_tag}.png")
+                    saved = False
+                    try:
+                        iframe_el = page.locator("iframe[name='iframeApplication']")
+                        if iframe_el.count() > 0:
+                            iframe_el.first.screenshot(path=evidence_path)
+                            saved = True
+                        else:
+                            page.screenshot(path=evidence_path)
+                            saved = True
+                    except Exception:
+                        page.screenshot(path=evidence_path)
+                        saved = True
+
+                    if saved and run_id and os.path.exists(evidence_path):
+                        from core.database import BuzonRun
+                        db_run = SessionLocal()
+                        try:
+                            run = db_run.query(BuzonRun).filter(BuzonRun.id == run_id).first()
+                            if run:
+                                run.evidencia_path = evidence_path
+                                db_run.commit()
+                        finally:
+                            db_run.close()
+                    if saved:
+                        print(f"📸 Evidencia guardada: {evidence_path}")
+                except Exception as e:
+                    print(f"⚠️ No se pudo guardar evidencia: {e}")
 
                 # 4. Procesar Mensajes (Lógica de bucle)
                 print("⏳ Estabilizando vista del buzón...")

@@ -50,16 +50,6 @@
                     <span>Hasta:</span>
                     <input type="date" v-model="endDate" :max="getToday()" class="bg-dark border border-gray-700 rounded px-2 py-1 text-white text-center" />
                 </div>
-
-                <div class="mt-4">
-                    <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
-                        <div class="relative">
-                            <input type="checkbox" v-model="showBrowser" class="sr-only peer">
-                            <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        </div>
-                        <span class="font-medium">Mostrar Ventana (Navegador visible)</span>
-                    </label>
-                </div>
             </div>
             
             <div class="flex flex-col gap-2 w-full md:w-auto">
@@ -148,12 +138,13 @@
                         <tr>
                             <th class="px-3 py-2">Empresa</th>
                             <th class="px-3 py-2">Estado</th>
-                            <th class="px-3 py-2 text-right">Inicio</th>
+                            <th class="px-3 py-2 text-center">Evidencia</th>
+                            <th class="px-3 py-2 text-right">Fecha</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-dark-border">
                         <tr v-if="runs.length === 0">
-                            <td colspan="3" class="p-4 text-center text-gray-500">Sin ejecuciones recientes.</td>
+                            <td colspan="4" class="p-4 text-center text-gray-500">Sin ejecuciones recientes.</td>
                         </tr>
                         <tr v-for="run in runs" :key="run.id" class="hover:bg-dark-border/30">
                             <td class="px-3 py-2">
@@ -173,8 +164,19 @@
                                 <span v-else-if="run.status === 'STOPPED'" class="text-yellow-500 font-bold">DETENIDO</span>
                                 <span v-else class="text-gray-400">{{ run.status }}</span>
                             </td>
+                            <td class="px-3 py-2 text-center">
+                                <button 
+                                    v-if="run.evidencia_path" 
+                                    @click="openEvidence(run.evidencia_path)" 
+                                    class="text-primary hover:text-white text-xs underline font-bold"
+                                    title="Ver captura de evidencia"
+                                >
+                                    Ver
+                                </button>
+                                <span v-else class="text-gray-600 text-[10px]">-</span>
+                            </td>
                             <td class="px-3 py-2 text-right text-gray-500">
-                                {{ run.started_at ? new Date(run.started_at).toLocaleTimeString() : '-' }}
+                                {{ run.finished_at ? new Date(run.finished_at.replace('Z', '')).toLocaleString() : '-' }}
                             </td>
                         </tr>
                     </tbody>
@@ -183,6 +185,26 @@
         </div>
     </div>
 
+    <!-- Evidence Modal -->
+    <div v-if="showEvidenceModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click="closeEvidence">
+        <div class="relative max-w-[95vw] max-h-[95vh] flex flex-col items-center" @click.stop>
+            <button 
+                @click="closeEvidence"
+                class="absolute -top-10 right-0 text-white hover:text-red-500 text-2xl font-bold transition-colors"
+                title="Cerrar (Esc)"
+            >
+                ✕
+            </button>
+            <img 
+                :src="currentEvidenceUrl" 
+                class="max-w-full max-h-[90vh] rounded-lg shadow-2xl border border-gray-600 object-contain"
+                alt="Evidencia" 
+            />
+            <div class="mt-2 flex gap-4">
+                 <a :href="currentEvidenceUrl" download="evidencia.png" class="text-primary text-sm hover:underline">Descargar Imagen</a>
+            </div>
+        </div>
+    </div>
   </div>
 </template>
 
@@ -245,6 +267,26 @@ const isRunning = computed(() => {
 
 // Actions
 const getCompanyName = (ruc) => companies.value.find(c => c.ruc === ruc)?.razon_social || ruc;
+const getEvidenceLink = (path) => path ? `/api/files/download?path=${encodeURIComponent(path)}` : '#';
+
+// Evidence Modal Logic
+const showEvidenceModal = ref(false);
+const currentEvidenceUrl = ref('');
+
+const openEvidence = (path) => {
+    currentEvidenceUrl.value = getEvidenceLink(path);
+    showEvidenceModal.value = true;
+};
+
+const closeEvidence = () => {
+    showEvidenceModal.value = false;
+    currentEvidenceUrl.value = '';
+};
+
+// Esc Key Listener
+const handleKeydown = (e) => {
+    if (e.key === 'Escape' && showEvidenceModal.value) closeEvidence();
+};
 
 const fetchCompanies = async () => {
     try {
@@ -415,6 +457,7 @@ const poll = async () => {
 
 onMounted(async () => {
     isActive = true;
+    window.addEventListener('keydown', handleKeydown);
     await fetchCompanies();
     await fetchPeriods(); // Load initial
     poll();
@@ -422,6 +465,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
     isActive = false;
+    window.removeEventListener('keydown', handleKeydown);
     if(pollingInterval) clearTimeout(pollingInterval);
 });
 </script>
