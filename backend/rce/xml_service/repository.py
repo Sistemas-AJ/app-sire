@@ -33,6 +33,7 @@ def fetch_items_pendientes_xml(
         )
         .filter(RCEPropuestaItem.ruc_empresa == ruc_empresa)
         .filter(RCEPropuestaItem.periodo == periodo)
+        .filter(RCEPropuestaItem.vigente == True)
         .filter(
             (CPEEvidencia.id == None) | (CPEEvidencia.status != "OK")
         )

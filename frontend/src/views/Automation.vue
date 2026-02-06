@@ -394,24 +394,20 @@ const runAutomation = async () => {
     if (runMode.value === 'todo') {
         payload.rucs = companies.value.filter(c => c.activo).map(c => c.ruc);
     } else {
-        // 'solo_fallidos' logic? Frontend doesn't strictly track failures locally except visual logs.
-        // Usually backend handles 'retry failed' logic.
-        // If user selects 'solo_fallidos', maybe we send empty runs list and backend finds failed from DB?
-        // Or we should allow user to select?
-        // Let's assume for now 'todo' is the primary use case.
-        // If 'solo_fallidos', I'll send all too, hoping backend filters? 
-        // Or maybe I filter runs with error status locally and send those RUCs?
-        // I'll implement logic: Filter companies with recent errors?
-        // Simplest: Send all, backend loop handles logic?
-        // Actually, Start button text changes: "Reintentar". 
-        // If we are retying, we pass the same parameters.
-        if (runs.value.length > 0) {
-             // Retry Failed
-             const failedRucs = runs.value.filter(r => ['ERROR', 'PARTIAL'].includes(r.status)).map(r => r.ruc_empresa); // Assuming run has ruc_empresa
-             if (failedRucs.length > 0) payload.rucs = failedRucs;
-             else payload.rucs = companies.value.filter(c => c.activo).map(c => c.ruc);
+        // 'solo_fallidos' logic: Frontend explicitly filters runs from the current view
+        // User Requirement: Filter runs with status ERROR, PARTIAL, or STOPPED from current period.
+        const targetStatuses = ['ERROR', 'PARTIAL', 'STOPPED'];
+        const failedRuns = runs.value.filter(r => targetStatuses.includes(r.status));
+        
+        if (failedRuns.length > 0) {
+            payload.rucs = failedRuns.map(r => r.ruc_empresa);
         } else {
-             payload.rucs = companies.value.filter(c => c.activo).map(c => c.ruc);
+            // Edge case: No failed runs found in current view.
+            // Option A: Send empty list (might confuse backend?)
+            // Option B: Alert user.
+            // Option C: Fallback to all? No, that defeats the purpose.
+            alert("No hay ejecuciones con estado ERROR, PARCIAL o DETENIDO en el periodo seleccionado para reintentar.");
+            return; // Abort
         }
     }
 

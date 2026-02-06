@@ -135,14 +135,22 @@ def get_detalle(
 def get_progress(ruc: str, periodo: str, db: Session = Depends(get_db)):
     total_items = (
         db.query(func.count(RCEPropuestaItem.id))
-        .filter(RCEPropuestaItem.ruc_empresa == ruc, RCEPropuestaItem.periodo == periodo)
+        .filter(
+            RCEPropuestaItem.ruc_empresa == ruc,
+            RCEPropuestaItem.periodo == periodo,
+            RCEPropuestaItem.vigente == True,
+        )
         .scalar()
     )
 
     rows = (
         db.query(CPEEvidencia.status, func.count(CPEEvidencia.id))
         .join(RCEPropuestaItem, CPEEvidencia.propuesta_item_id == RCEPropuestaItem.id)
-        .filter(RCEPropuestaItem.ruc_empresa == ruc, RCEPropuestaItem.periodo == periodo)
+        .filter(
+            RCEPropuestaItem.ruc_empresa == ruc,
+            RCEPropuestaItem.periodo == periodo,
+            RCEPropuestaItem.vigente == True,
+        )
         .filter(CPEEvidencia.tipo == "XML")
         .group_by(CPEEvidencia.status)
         .all()
@@ -176,19 +184,19 @@ def get_progress(ruc: str, periodo: str, db: Session = Depends(get_db)):
 def get_progress_global(periodo: str, db: Session = Depends(get_db)):
     total_items = (
         db.query(func.count(RCEPropuestaItem.id))
-        .filter(RCEPropuestaItem.periodo == periodo)
+        .filter(RCEPropuestaItem.periodo == periodo, RCEPropuestaItem.vigente == True)
         .scalar()
     )
     total_empresas = (
         db.query(func.count(func.distinct(RCEPropuestaItem.ruc_empresa)))
-        .filter(RCEPropuestaItem.periodo == periodo)
+        .filter(RCEPropuestaItem.periodo == periodo, RCEPropuestaItem.vigente == True)
         .scalar()
     )
 
     rows = (
         db.query(CPEEvidencia.status, func.count(CPEEvidencia.id))
         .join(RCEPropuestaItem, CPEEvidencia.propuesta_item_id == RCEPropuestaItem.id)
-        .filter(RCEPropuestaItem.periodo == periodo)
+        .filter(RCEPropuestaItem.periodo == periodo, RCEPropuestaItem.vigente == True)
         .filter(CPEEvidencia.tipo == "XML")
         .group_by(CPEEvidencia.status)
         .all()
@@ -235,7 +243,11 @@ def get_report(ruc: str, periodo: str, db: Session = Depends(get_db)):
                 CPEDetalle.extractor_version == "v1",
             ),
         )
-        .filter(RCEPropuestaItem.ruc_empresa == ruc, RCEPropuestaItem.periodo == periodo)
+        .filter(
+            RCEPropuestaItem.ruc_empresa == ruc,
+            RCEPropuestaItem.periodo == periodo,
+            RCEPropuestaItem.vigente == True,
+        )
         .order_by(RCEPropuestaItem.id.asc())
     )
 
@@ -342,6 +354,7 @@ def repository(
         q = q.filter(RCEPropuestaItem.periodo == periodo)
     if ruc_empresa:
         q = q.filter(RCEPropuestaItem.ruc_empresa == ruc_empresa)
+    q = q.filter(RCEPropuestaItem.vigente == True)
 
     if search:
         like = f"%{search}%"

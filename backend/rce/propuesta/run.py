@@ -1,5 +1,6 @@
 import argparse
 import csv
+import os
 from datetime import datetime
 from rce.propuesta.load_items import load_rce_items_from_csv
 from core.database import db_session, Empresa, EmpresaSire, RCEPropuestaFile
@@ -59,32 +60,44 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
     )
     digest = sha256_bytes(zip_bytes)
 
-    # 6) guardar/extraer/convertir
+    # 6) guardar/extraer/convertir (solo si el hash cambió)
     out_dir = ensure_dirs(periodo, ruc)
-    csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, periodo=periodo)
-    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.reader(f)
-        try:
-            next(reader)
-        except StopIteration:
-            total_rows = 0
-        else:
-            total_rows = sum(1 for _ in reader)
-    print(f"📊 Filas CSV (sin header): {total_rows}")
+    zip_path = f"{out_dir}/propuesta_{periodo}.zip"
+    csv_path = f"{out_dir}/propuesta_{periodo}.csv"
     xlsx_path = f"{out_dir}/propuesta_{periodo}.xlsx"
-    csv_to_xlsx(csv_path, xlsx_path)
-    load_rce_items_from_csv(db, ruc, periodo, csv_path, delimiter=",")
 
-    # 7) registrar en BD (upsert simple)
     row = (
         db.query(RCEPropuestaFile)
         .filter(RCEPropuestaFile.ruc_empresa == ruc, RCEPropuestaFile.periodo == periodo)
         .first()
     )
+
+    same_hash = row and row.sha256 == digest
+    files_exist = all(map(lambda p: p and os.path.exists(p), [zip_path, csv_path, xlsx_path]))
+
+    if same_hash and files_exist:
+        print("🔁 ZIP sin cambios: se mantiene archivo existente.")
+    else:
+        csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, periodo=periodo)
+        with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.reader(f)
+            try:
+                next(reader)
+            except StopIteration:
+                total_rows = 0
+            else:
+                total_rows = sum(1 for _ in reader)
+        print(f"📊 Filas CSV (sin header): {total_rows}")
+        csv_to_xlsx(csv_path, xlsx_path)
+        load_rce_items_from_csv(db, ruc, periodo, csv_path, delimiter=",")
+
+    # 7) registrar en BD (upsert simple)
     if not row:
         row = RCEPropuestaFile(
             ruc_empresa=ruc,
             periodo=periodo,
+            fec_ini=datetime.strptime(fec_ini, "%Y-%m-%d").date(),
+            fec_fin=datetime.strptime(fec_fin, "%Y-%m-%d").date(),
             num_ticket=ticket,
             cod_proceso=cod_proc,
             storage_path=out_dir,
@@ -98,6 +111,8 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
         row.storage_path = out_dir
         row.filename = f"propuesta_{periodo}.zip"
         row.sha256 = digest
+        row.fec_ini = datetime.strptime(fec_ini, "%Y-%m-%d").date()
+        row.fec_fin = datetime.strptime(fec_fin, "%Y-%m-%d").date()
 
     db.commit()
 
@@ -106,7 +121,7 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
         "ticket": ticket,
         "csv": csv_path,
         "xlsx": xlsx_path,
-        "zip": f"{out_dir}/propuesta_{periodo}.zip",
+        "zip": zip_path,
     }
 
 

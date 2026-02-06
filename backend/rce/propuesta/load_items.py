@@ -60,6 +60,7 @@ def load_rce_items_from_csv(
     updated = 0
     skipped = 0
     errors = 0
+    seen_keys = set()
 
     # Usar utf-8-sig ayuda si el archivo fue guardado en Excel (quita el BOM del inicio)
     with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
@@ -86,6 +87,7 @@ def load_rce_items_from_csv(
                 item_data = dict(
                     ruc_empresa=ruc_empresa,
                     periodo=periodo,
+                    vigente=True,
                     car_sunat=_norm_str(r.get("CAR SUNAT")),
                     fecha_emision=fecha_emision,
                     fecha_vcto_pago=_parse_date(r.get("Fecha Vcto/Pago")),
@@ -150,17 +152,51 @@ def load_rce_items_from_csv(
                 if existing is None:
                     db.add(RCEPropuestaItem(**item_data))
                     inserted += 1
+                    seen_keys.add(_item_key(item_data))
                 else:
                     if update_on_conflict:
                         for k, v in item_data.items():
                             setattr(existing, k, v)
+                        existing.vigente = True
                         updated += 1
+                        seen_keys.add(_item_key(item_data))
                     else:
                         skipped += 1
 
             except Exception as e:
                 errors += 1
                 print(f"⚠️ Error en fila CSV {i}: {e}")
+
+    # Marcar como no vigentes los items que ya no están en el CSV
+    if seen_keys:
+        rows = (
+            db.query(
+                RCEPropuestaItem.id,
+                RCEPropuestaItem.ruc_empresa,
+                RCEPropuestaItem.periodo,
+                RCEPropuestaItem.ruc_emisor,
+                RCEPropuestaItem.tipo_cp,
+                RCEPropuestaItem.serie,
+                RCEPropuestaItem.numero,
+                RCEPropuestaItem.fecha_emision,
+            )
+            .filter(RCEPropuestaItem.ruc_empresa == ruc_empresa, RCEPropuestaItem.periodo == periodo)
+            .all()
+        )
+        for row in rows:
+            key = (
+                row.ruc_empresa,
+                row.periodo,
+                row.ruc_emisor,
+                row.tipo_cp,
+                row.serie,
+                row.numero,
+                row.fecha_emision,
+            )
+            if key not in seen_keys:
+                db.query(RCEPropuestaItem).filter(RCEPropuestaItem.id == row.id).update(
+                    {"vigente": False}, synchronize_session=False
+                )
 
     db.commit()
     return {"inserted": inserted, "updated": updated, "skipped": skipped, "errors": errors}

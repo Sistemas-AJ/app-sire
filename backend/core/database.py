@@ -156,6 +156,8 @@ class RCEPropuestaFile(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
     periodo = Column(String(6), nullable=False)
+    fec_ini = Column(Date, nullable=True)
+    fec_fin = Column(Date, nullable=True)
 
     num_ticket = Column(String(20), nullable=True)
     cod_proceso = Column(String(10), nullable=True)
@@ -202,6 +204,7 @@ class RCEPropuestaItem(Base):
 
     ruc_empresa = Column(String(11), ForeignKey("empresas.ruc"), nullable=False)
     periodo = Column(String(6), nullable=False)  # YYYYMM
+    vigente = Column(Boolean, default=True)
 
     car_sunat = Column(String(40), nullable=True)
 

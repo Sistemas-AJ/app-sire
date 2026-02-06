@@ -1,3 +1,6 @@
+import os
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 from core.database import db_session, RCEPropuestaFile
 from .repo import get_empresas_sire_activas
@@ -59,22 +62,33 @@ def procesar_empresa_periodo(db: Session, empresa, cred_sire, periodo: str, fec_
     )
     digest = sha256_bytes(zip_bytes)
 
-    # 6) Guardar/extract/convert
+    # 6) Guardar/extract/convert (solo si el hash cambió)
     out_dir = ensure_dirs(periodo, ruc)
-    csv_path = save_zip_and_extract_csv(zip_bytes, out_dir=out_dir, periodo=periodo)
+    zip_path = f"{out_dir}/propuesta_{periodo}.zip"
+    csv_path = f"{out_dir}/propuesta_{periodo}.csv"
     xlsx_path = f"{out_dir}/propuesta_{periodo}.xlsx"
-    csv_to_xlsx(csv_path, xlsx_path)
 
-    # 7) Persistir file record (si ya existe por periodo, actualiza)
     row = (
         db.query(RCEPropuestaFile)
         .filter(RCEPropuestaFile.ruc_empresa == ruc, RCEPropuestaFile.periodo == periodo)
         .first()
     )
+    same_hash = row and row.sha256 == digest
+    files_exist = all(map(lambda p: p and os.path.exists(p), [zip_path, csv_path, xlsx_path]))
+
+    if same_hash and files_exist:
+        print("🔁 ZIP sin cambios: se mantiene archivo existente.")
+    else:
+        csv_path = save_zip_and_extract_csv(zip_bytes, out_dir=out_dir, periodo=periodo)
+        csv_to_xlsx(csv_path, xlsx_path)
+
+    # 7) Persistir file record (si ya existe por periodo, actualiza)
     if not row:
         row = RCEPropuestaFile(
             ruc_empresa=ruc,
             periodo=periodo,
+            fec_ini=datetime.strptime(fec_ini, "%Y-%m-%d").date(),
+            fec_fin=datetime.strptime(fec_fin, "%Y-%m-%d").date(),
             num_ticket=ticket,
             cod_proceso=cod_proceso,
             storage_path=out_dir,
@@ -88,6 +102,8 @@ def procesar_empresa_periodo(db: Session, empresa, cred_sire, periodo: str, fec_
         row.storage_path = out_dir
         row.filename = f"propuesta_{periodo}.zip"
         row.sha256 = digest
+        row.fec_ini = datetime.strptime(fec_ini, "%Y-%m-%d").date()
+        row.fec_fin = datetime.strptime(fec_fin, "%Y-%m-%d").date()
 
     db.commit()
     return {"ruc": ruc, "periodo": periodo, "csv": csv_path, "xlsx": xlsx_path, "ticket": ticket}
