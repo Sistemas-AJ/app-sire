@@ -15,6 +15,7 @@ from core.database import (
     RCEPropuestaItem,
     CPEEvidencia,
     CPEDetalle,
+    BuzonRun,
 )
 from api import schemas
 from api.routers.auth import get_current_user
@@ -77,6 +78,7 @@ def eliminar_empresa(ruc: str, db: Session = Depends(get_db)):
     db.query(RCEPropuestaFile).filter(RCEPropuestaFile.ruc_empresa == ruc).delete(synchronize_session=False)
     db.query(RCERun).filter(RCERun.ruc_empresa == ruc).delete(synchronize_session=False)
     db.query(Notificacion).filter(Notificacion.ruc_empresa == ruc).delete(synchronize_session=False)
+    db.query(BuzonRun).filter(BuzonRun.ruc_empresa == ruc).delete(synchronize_session=False)
     db.query(EmpresaSire).filter(EmpresaSire.ruc_empresa == ruc).delete(synchronize_session=False)
 
     db.delete(emp)
