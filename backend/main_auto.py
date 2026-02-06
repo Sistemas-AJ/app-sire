@@ -192,7 +192,16 @@ def run_automation_process(
                     except Exception as e:
                         print(f"⚠️ No se pudo guardar evidencia de error: {e}")
                     emp.last_run_status = 'ERROR'
+                    emp.last_run_error = 'No se encontró el botón del buzón'
                     db.commit()
+                    run_stats.append({
+                        "ruc": emp.ruc,
+                        "descargas_ok": 0,
+                        "skipped": 0,
+                        "errors": 1,
+                        "analizados": 0,
+                        "sin_novedades": False,
+                    })
                     continue
 
                 # 3. Obtener Frame del Buzón
