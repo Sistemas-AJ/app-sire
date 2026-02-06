@@ -164,6 +164,24 @@ def run_automation_process(
                 
                 if not found:
                     print("❌ No se encontró el botón del buzón.")
+                    try:
+                        period_tag = "sin_periodo"
+                        if date_from and date_to:
+                            period_tag = f"{date_from.strftime('%Y%m%d')}_{date_to.strftime('%Y%m%d')}"
+                        elif date_from:
+                            period_tag = f"{date_from.strftime('%Y%m%d')}_{datetime.now().strftime('%Y%m%d')}"
+                        fail_dir = os.path.join(os.getcwd(), "downloads", "buzon_evidencias", emp.ruc)
+                        os.makedirs(fail_dir, exist_ok=True)
+                        fail_png = os.path.join(fail_dir, f"buzon_no_boton_{period_tag}.png")
+                        fail_html = os.path.join(fail_dir, f"buzon_no_boton_{period_tag}.html")
+                        page.screenshot(path=fail_png)
+                        with open(fail_html, "w", encoding="utf-8") as f:
+                            f.write(page.content())
+                        print(f"📸 Evidencia (sin botón) guardada: {fail_png}")
+                        print(f"🧾 HTML guardado: {fail_html}")
+                        print(f"🔗 URL actual: {page.url}")
+                    except Exception as e:
+                        print(f"⚠️ No se pudo guardar evidencia de error: {e}")
                     emp.last_run_status = 'ERROR'
                     db.commit()
                     continue
