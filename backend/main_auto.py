@@ -140,8 +140,17 @@ def run_automation_process(
                     emp.last_run_status = 'ERROR'
                     db.commit()
                     continue
-                
-                if not check_session(page):
+
+                # Detectar pantalla de login explícitamente
+                try:
+                    login_visible = page.locator("text=Iniciar sesión").is_visible() or page.locator("input[placeholder='Usuario']").is_visible()
+                except Exception:
+                    login_visible = False
+
+                if login_visible:
+                    print("🔐 Detectada pantalla de login. Forzando autenticación...")
+
+                if login_visible or not check_session(page):
                     if intentar_login_automatico(page, emp):
                         # Guardar sesión si el login fue exitoso
                         context.storage_state(path=session_path)
