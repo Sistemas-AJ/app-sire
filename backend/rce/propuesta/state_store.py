@@ -1,4 +1,5 @@
 import json, os
+from json import JSONDecodeError
 from datetime import datetime, timezone
 from typing import Any, Dict
 from pathlib import Path
@@ -13,8 +14,23 @@ def load_state(ruc: str) -> Dict[str, Any]:
     p = _path(ruc)
     if not os.path.exists(p):
         return {"ruc": ruc}
-    with open(p, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            st = json.load(f)
+    except (JSONDecodeError, OSError):
+        # Recover from a broken session file instead of crashing the whole run.
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        bad_path = f"{p}.bad-{ts}"
+        try:
+            os.replace(p, bad_path)
+        except OSError:
+            pass
+        return {"ruc": ruc}
+
+    if not isinstance(st, dict):
+        return {"ruc": ruc}
+    st.setdefault("ruc", ruc)
+    return st
 
 def save_state(ruc: str, patch: Dict[str, Any]) -> Dict[str, Any]:
     st = load_state(ruc)
