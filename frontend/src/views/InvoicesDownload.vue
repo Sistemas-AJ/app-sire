@@ -160,6 +160,19 @@
                              <span class="text-yellow-500">{{ currentProcessingCompany.pending }} Pendientes</span>
                         </p>
                     </div>
+                    
+                    <!-- Current Item Details -->
+                    <div v-if="currentProcessingCompany?.current_item" class="border-l border-blue-900/30 pl-4 ml-2 hidden md:block animate-pulse">
+                        <p class="text-[10px] text-blue-300 font-bold uppercase tracking-wider mb-0.5">Procesando Comprobante</p>
+                        <div class="flex items-center gap-2">
+                             <span class="text-white text-sm font-mono font-bold">{{ currentProcessingCompany.current_item.serie }}-{{ currentProcessingCompany.current_item.numero }}</span>
+                             <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300 font-mono">{{ currentProcessingCompany.current_item.tipo_cp }}</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 truncate max-w-[200px]">
+                            <span v-if="currentProcessingCompany.current_item.status === 'ERROR'" class="text-red-400">{{ currentProcessingCompany.current_item.error_message || 'Error' }}</span>
+                            <span v-else>{{ currentProcessingCompany.current_item.status || 'En progreso...' }}</span>
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Cards Grid -->
@@ -202,12 +215,12 @@
                             <div class="bg-yellow-500 h-full transition-all duration-500" :style="{ width: getProgress(ruc).pctOther + '%' }"></div>
                         </div>
 
-                        <div class="text-[10px] text-gray-500 flex flex-col gap-0.5 relative z-10">
+                        <div class="text-xs text-gray-400 mt-1 flex flex-col gap-0.5 relative z-10">
                              <div class="flex justify-between font-mono">
                                  <!-- Counter Logic: Processed / Limit (if custom) else Total -->
                                  <span v-if="config.limitType === 'custom'" class="text-gray-300">
                                      <span class="text-white font-bold">{{ getProgress(ruc).processedItems }}</span> / {{ config.limit }}
-                                     <span class="text-gray-600 text-[9px] ml-1">(Total: {{ getProgress(ruc).real_total || getProgress(ruc).total_items }})</span>
+                                     <span class="text-gray-500 text-[10px] ml-1">(Total: {{ getProgress(ruc).real_total || getProgress(ruc).total_items }})</span>
                                  </span>
                                  <span v-else>
                                      <span class="text-white font-bold">{{ getProgress(ruc).processedItems }}</span> / {{ getProgress(ruc).total_items }}

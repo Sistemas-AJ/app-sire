@@ -185,6 +185,41 @@ def get_progress(ruc: str, periodo: str, db: Session = Depends(get_db)):
 
     remaining = max(total_items - ok - not_found, 0)
 
+    run = (
+        db.query(RCERun)
+        .filter(RCERun.modulo == "XML", RCERun.ruc_empresa == ruc, RCERun.periodo == periodo)
+        .order_by(RCERun.id.desc())
+        .first()
+    )
+
+    current_row = (
+        db.query(CPEEvidencia, RCEPropuestaItem)
+        .join(RCEPropuestaItem, CPEEvidencia.propuesta_item_id == RCEPropuestaItem.id)
+        .filter(
+            RCEPropuestaItem.ruc_empresa == ruc,
+            RCEPropuestaItem.periodo == periodo,
+            RCEPropuestaItem.vigente == True,
+            CPEEvidencia.tipo == "XML",
+        )
+        .order_by(CPEEvidencia.last_attempt_at.desc().nullslast(), CPEEvidencia.id.desc())
+        .first()
+    )
+
+    current_item = None
+    if current_row:
+        ev, item = current_row
+        current_item = schemas.XMLProgressCurrentItem(
+            item_id=item.id,
+            tipo_cp=item.tipo_cp,
+            serie=item.serie,
+            numero=item.numero,
+            ruc_emisor=item.ruc_emisor,
+            status=ev.status,
+            error_message=ev.error_message,
+            attempt_count=ev.attempt_count,
+            last_attempt_at=ev.last_attempt_at,
+        )
+
     return schemas.XMLProgressResponse(
         ruc=ruc,
         periodo=periodo,
@@ -196,6 +231,8 @@ def get_progress(ruc: str, periodo: str, db: Session = Depends(get_db)):
         auth=auth,
         pending=pending,
         remaining=remaining,
+        run_status=run.status if run else None,
+        current_item=current_item,
     )
 
 

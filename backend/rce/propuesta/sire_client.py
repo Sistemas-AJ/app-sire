@@ -10,6 +10,33 @@ POLL_TIMEOUT_SECONDS = 180
 class SireApiError(RuntimeError):
     pass
 
+
+def _safe_json(r: requests.Response, context: str) -> Dict[str, Any]:
+    try:
+        return r.json()
+    except ValueError as e:
+        body = (r.text or "")[:300]
+        raise SireApiError(f"{context}: respuesta JSON inválida de SUNAT ({e}). body={body}")
+
+
+def _normalize_http_error(r: requests.Response, context: str) -> str:
+    body = (r.text or "")[:500]
+    try:
+        j = r.json()
+    except ValueError:
+        return f"{context} {r.status_code}: {body}"
+
+    # Caso negocio conocido: no hay comprobantes en el periodo consultado.
+    if r.status_code == 422:
+        for err in (j.get("errors") or []):
+            if str(err.get("cod")) == "1070":
+                return "CSV vacío o sin encabezados (sin compras en el periodo)."
+
+    msg = j.get("msg") or j.get("message") or j.get("error_description") or j.get("error")
+    if msg:
+        return f"{context} {r.status_code}: {msg}"
+    return f"{context} {r.status_code}: {body}"
+
 def auth_headers(token: str) -> Dict[str, str]:
     return {
         "Authorization": f"Bearer {token}",
@@ -35,8 +62,8 @@ def generar_ticket_exportacion_propuesta(
     }
     r = requests.get(url, headers=auth_headers(token), params=params, timeout=HTTP_TIMEOUT)
     if r.status_code >= 400:
-        raise SireApiError(f"generar_ticket {r.status_code}: {r.text[:300]}")
-    j = r.json()
+        raise SireApiError(_normalize_http_error(r, "generar_ticket"))
+    j = _safe_json(r, "generar_ticket")
     t = j.get("numTicket")
     if not t:
         raise SireApiError(f"Respuesta sin numTicket: {j}")
@@ -53,8 +80,8 @@ def consultar_estado_ticket(token: str, per: str, numTicket: str) -> Dict[str, A
     }
     r = requests.get(url, headers=auth_headers(token), params=params, timeout=HTTP_TIMEOUT)
     if r.status_code >= 400:
-        raise SireApiError(f"estado_ticket {r.status_code}: {r.text[:300]}")
-    return r.json()
+        raise SireApiError(_normalize_http_error(r, "estado_ticket"))
+    return _safe_json(r, "estado_ticket")
 
 def esperar_hasta_terminado(token: str, per: str, numTicket: str) -> Dict[str, Any]:
     t0 = time.time()
@@ -102,5 +129,5 @@ def descargar_archivo_reporte(
     }
     r = requests.get(url, headers={"Authorization": f"Bearer {token}"}, params=params, timeout=HTTP_TIMEOUT)
     if r.status_code >= 400:
-        raise SireApiError(f"descarga {r.status_code}: {r.text[:300]}")
+        raise SireApiError(_normalize_http_error(r, "descarga"))
     return r.content

@@ -79,14 +79,22 @@ def procesar_empresa(db, emp: Empresa, cred: EmpresaSire, periodo: str, fec_ini:
         print("🔁 ZIP sin cambios: se mantiene archivo existente.")
     else:
         csv_path = save_zip_and_extract_csv(zip_bytes, out_dir, periodo=periodo)
-        with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
-            reader = csv.reader(f)
-            try:
-                next(reader)
-            except StopIteration:
-                total_rows = 0
-            else:
-                total_rows = sum(1 for _ in reader)
+        try:
+            with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.reader(f)
+                try:
+                    next(reader)
+                except StopIteration:
+                    total_rows = 0
+                else:
+                    total_rows = sum(1 for _ in reader)
+        except csv.Error as e:
+            # Algunos CSV SUNAT llegan con comillas internas mal escapadas.
+            # Para no romper el flujo, hacemos un conteo aproximado por líneas.
+            print(f"⚠️ CSV malformado al contar filas ({e}). Usando conteo por líneas.")
+            with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+                total_lines = sum(1 for _ in f)
+            total_rows = max(total_lines - 1, 0)
         print(f"📊 Filas CSV (sin header): {total_rows}")
         csv_to_xlsx(csv_path, xlsx_path)
         load_rce_items_from_csv(db, ruc, periodo, csv_path, delimiter=",")

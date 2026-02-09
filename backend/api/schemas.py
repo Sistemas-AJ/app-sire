@@ -118,6 +118,17 @@ class XMLStopResponse(BaseModel):
     ok: bool
     message: str
 
+class XMLProgressCurrentItem(BaseModel):
+    item_id: int
+    tipo_cp: Optional[str] = None
+    serie: Optional[str] = None
+    numero: Optional[str] = None
+    ruc_emisor: Optional[str] = None
+    status: Optional[str] = None
+    error_message: Optional[str] = None
+    attempt_count: Optional[int] = None
+    last_attempt_at: Optional[datetime] = None
+
 class XMLProgressResponse(BaseModel):
     ruc: str
     periodo: str
@@ -129,6 +140,8 @@ class XMLProgressResponse(BaseModel):
     auth: int
     pending: int
     remaining: int
+    run_status: Optional[str] = None
+    current_item: Optional[XMLProgressCurrentItem] = None
 
 class XMLProgressGlobalResponse(BaseModel):
     periodo: str

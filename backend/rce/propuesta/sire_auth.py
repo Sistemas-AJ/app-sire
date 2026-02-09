@@ -6,6 +6,14 @@ class SireAuthError(RuntimeError):
     pass
 
 
+def _safe_json_or_error(r: requests.Response, context: str):
+    try:
+        return r.json()
+    except ValueError as e:
+        body = (r.text or "")[:300]
+        raise SireAuthError(f"{context}: respuesta JSON inválida de SUNAT ({e}). body={body}")
+
+
 def get_token_sire(
     client_id: str,
     client_secret: str,
@@ -44,9 +52,16 @@ def get_token_sire(
 
     r = requests.post(token_url, data=data, headers=headers, timeout=timeout)
     if r.status_code >= 400:
+        try:
+            j_err = r.json()
+            msg = j_err.get("error_description") or j_err.get("msg") or j_err.get("error")
+            if msg:
+                raise SireAuthError(f"Token error {r.status_code}: {msg}")
+        except ValueError:
+            pass
         raise SireAuthError(f"Token error {r.status_code}: {r.text[:500]}")
 
-    j = r.json()
+    j = _safe_json_or_error(r, "token")
     access_token = j.get("access_token")
     expires_in = j.get("expires_in", 3000)
 
