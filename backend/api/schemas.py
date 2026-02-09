@@ -102,6 +102,8 @@ class XMLRunRequest(BaseModel):
     rucs: Optional[List[str]] = None
     limit: Optional[int] = None
     headless: bool = True
+    mode: Optional[str] = None  # "all" (default) | "pending_error"
+    resume: bool = True
 
 class XMLRunResponse(BaseModel):
     ok: bool
@@ -154,6 +156,7 @@ class XMLReportItemResponse(BaseModel):
     moneda: Optional[str] = None
     status: str
     storage_path: Optional[str] = None
+    xml_filename: Optional[str] = None
     error_message: Optional[str] = None
     detalle_json: Optional[Any] = None
 
@@ -203,6 +206,7 @@ class XMLRepositoryItemResponse(BaseModel):
     total: Optional[float] = None
     status_xml: str
     xml_path: Optional[str] = None
+    xml_filename: Optional[str] = None
     error_message: Optional[str] = None
 
 class XMLRepositoryResponse(BaseModel):
@@ -221,6 +225,7 @@ class EvidenciaResponse(BaseModel):
     tipo: str
     status: str
     storage_path: Optional[str] = None
+    xml_filename: Optional[str] = None
     sha256: Optional[str] = None
     error_message: Optional[str] = None
     attempt_count: int

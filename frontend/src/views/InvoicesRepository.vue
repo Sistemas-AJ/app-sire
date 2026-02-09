@@ -77,6 +77,7 @@
                         <th class="px-6 py-4 font-semibold">Emisor</th>
                         <th class="px-6 py-4 font-semibold">Comprobante</th>
                         <th class="px-6 py-4 font-semibold">Total</th>
+                        <th class="px-6 py-4 font-semibold">Archivo</th>
                         <th class="px-6 py-4 font-semibold text-center">Estado</th>
                         <th class="px-6 py-4 font-semibold text-right">Acciones</th>
                     </tr>
@@ -112,6 +113,11 @@
                         </td>
                          <td class="px-6 py-4 font-mono font-bold text-gray-300">
                              {{ item.moneda }} {{ item.total }}
+                         </td>
+                         <td class="px-6 py-4">
+                             <div class="text-white text-xs truncate max-w-[180px]" :title="item.xml_filename || item.xml_path">
+                                 {{ item.xml_filename || (item.xml_path ? item.xml_path.split('/').pop() : '-') }}
+                             </div>
                          </td>
                         <td class="px-6 py-4 text-center">
                             <span :class="getStatusBadge(item.status_xml)" class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border min-w-[60px] text-center">

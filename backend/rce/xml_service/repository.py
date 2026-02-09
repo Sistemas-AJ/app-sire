@@ -16,6 +16,7 @@ def fetch_items_pendientes_xml(
     ruc_empresa: str,
     periodo: str,
     limit: Optional[int] = 200,
+    mode: Optional[str] = None,
 ) -> List[RCEPropuestaItem]:
     """
     Devuelve items que NO tienen evidencia XML OK.
@@ -34,11 +35,17 @@ def fetch_items_pendientes_xml(
         .filter(RCEPropuestaItem.ruc_empresa == ruc_empresa)
         .filter(RCEPropuestaItem.periodo == periodo)
         .filter(RCEPropuestaItem.vigente == True)
-        .filter(
+    )
+    if mode == "pending_error":
+        q = q.filter(
+            (CPEEvidencia.id == None)
+            | (CPEEvidencia.status.in_(["PENDING", "ERROR", "AUTH"]))
+        )
+    else:
+        q = q.filter(
             (CPEEvidencia.id == None) | (CPEEvidencia.status != "OK")
         )
-        .order_by(RCEPropuestaItem.id.asc())
-    )
+    q = q.order_by(RCEPropuestaItem.id.asc())
     if limit is not None:
         q = q.limit(limit)
     return q.all()

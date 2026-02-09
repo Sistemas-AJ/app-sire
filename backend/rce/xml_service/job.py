@@ -86,7 +86,12 @@ def run_xml_job_for_empresa_periodo(
         emp_usuario = emp.usuario_sol
         emp_clave = emp.clave_sol
 
-        raw_items = fetch_items_pendientes_xml(db, ruc_empresa, periodo, limit=limit)
+        mode = None
+        if run_id:
+            run = db.query(RCERun).filter(RCERun.id == run_id).first()
+            if run and run.stats_json:
+                mode = run.stats_json.get("mode")
+        raw_items = fetch_items_pendientes_xml(db, ruc_empresa, periodo, limit=limit, mode=mode)
         items = [
             {
                 "id": it.id,

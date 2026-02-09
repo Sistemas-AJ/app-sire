@@ -38,10 +38,12 @@
                                 <input type="radio" v-model="config.limitType" value="unlimited" name="limit" class="text-primary focus:ring-primary" />
                                 <span>Todo (Sin límite)</span>
                             </label>
+                             <!-- Companies Selector 
                              <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                                 <input type="radio" v-model="config.limitType" value="custom" name="limit" class="text-primary focus:ring-primary" />
                                 <span>Límite (Cant.)</span>
                             </label>
+                            -->
                         </div>
                         <input v-if="config.limitType === 'custom'" v-model.number="config.limit" type="number" class="mt-2 w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white text-xs focus:border-primary focus:outline-none" placeholder="Ej. 100" />
                     </div>
@@ -163,9 +165,13 @@
                 <!-- Cards Grid -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[300px] overflow-y-auto custom-scrollbar">
                     <div v-for="ruc in activeDownloads" :key="ruc" 
-                        @click="viewEvidences(ruc)"
-                        class="bg-gray-800/50 border border-gray-700 hover:border-primary/50 p-4 rounded-lg cursor-pointer transition-all relative overflow-hidden group"
-                        :class="{'border-green-500/50 bg-green-900/10': getProgress(ruc).isCompleted}">
+                        @click="toggleActiveSelection(ruc, $event)"
+                        @contextmenu.prevent="handleContextMenu($event, ruc)"
+                        class="bg-gray-800/50 border border-gray-700 hover:border-primary/50 p-4 rounded-lg cursor-pointer transition-all relative overflow-hidden group select-none"
+                        :class="{
+                            'border-green-500/50 bg-green-900/10': getProgress(ruc).isCompleted && !selectedActiveDownloads.includes(ruc),
+                            'ring-2 ring-primary bg-primary/10 border-primary': selectedActiveDownloads.includes(ruc)
+                        }">
                         
                         <div class="flex justify-between items-start mb-2 relative z-10">
                              <div class="min-w-0 pr-2">
@@ -174,13 +180,26 @@
                                 <span class="text-[9px] text-gray-600 font-mono block">Periodo Run: {{ getRunPeriod(ruc) }}</span>
                             </div>
                             <!-- Status Badge -->
-                            <span v-if="getProgress(ruc).isCompleted" class="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded border border-green-800 shadow-sm shadow-green-900/20 whitespace-nowrap">COMPLETADO</span>
+                            <div v-if="getProgress(ruc).isCompleted" class="flex flex-col items-end">
+                                <span v-if="getProgress(ruc).error > 0 || getProgress(ruc).not_found > 0 || getProgress(ruc).auth > 0" 
+                                      class="text-[9px] bg-yellow-900/50 text-yellow-500 px-1.5 py-0.5 rounded border border-yellow-800 shadow-sm font-bold whitespace-nowrap mb-1">
+                                    CON OBSERVACIONES
+                                </span>
+                                <span v-else class="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded border border-green-800 shadow-sm shadow-green-900/20 whitespace-nowrap">
+                                    COMPLETADO
+                                </span>
+                            </div>
                             <span v-else class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded whitespace-nowrap">{{ getProgress(ruc).percentage }}%</span>
                         </div>
 
-                        <!-- Mini Bar -->
-                        <div class="w-full bg-gray-700 h-1.5 rounded-full overflow-hidden mb-2 relative z-10">
-                            <div class="bg-primary h-full transition-all duration-500" :style="{ width: getProgress(ruc).percentage + '%' }"></div>
+                        <!-- Segmented Progress Bar -->
+                        <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden mb-2 relative z-10 flex">
+                            <!-- OK Segment (Primary/Blue) -->
+                            <div class="bg-blue-500 h-full transition-all duration-500" :style="{ width: getProgress(ruc).pctOk + '%' }"></div>
+                            <!-- Error Segment (Red) -->
+                            <div class="bg-red-500 h-full transition-all duration-500" :style="{ width: getProgress(ruc).pctError + '%' }"></div>
+                            <!-- Other Segment (Yellow) -->
+                            <div class="bg-yellow-500 h-full transition-all duration-500" :style="{ width: getProgress(ruc).pctOther + '%' }"></div>
                         </div>
 
                         <div class="text-[10px] text-gray-500 flex flex-col gap-0.5 relative z-10">
@@ -245,7 +264,7 @@
                             <tbody class="divide-y divide-dark-border">
                                 <tr v-for="(item, index) in evidences" :key="item.propuesta_item_id" class="hover:bg-dark-border/30 transition-colors">
                                     <td class="px-4 py-3 font-mono text-xs">{{ index + 1 }}</td>
-                                    <td class="px-4 py-3"><div class="text-white truncate max-w-[200px]" :title="item.storage_path">{{ getFilename(item.storage_path) }}</div></td>
+                                    <td class="px-4 py-3"><div class="text-white truncate max-w-[200px]" :title="item.xml_filename || item.storage_path">{{ item.xml_filename || getFilename(item.storage_path) }}</div></td>
                                     <td class="px-4 py-3"><span :class="getStatusBadge(item.status)" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border">{{ item.status }}</span></td>
                                     <td class="px-4 py-3 text-right space-x-2">
                                         <a v-if="item.status === 'OK'" :href="getDownloadLink(item.storage_path)" target="_blank" class="text-green-400 hover:text-green-300 font-bold text-xs underline">XML</a>
@@ -304,6 +323,22 @@
             </div>
             <div v-else class="flex-1 flex items-center justify-center p-12"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
         </div>
+    </div>
+    <!-- Context Menu -->
+    <div v-if="contextMenu.visible" 
+         :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }" 
+         class="fixed z-[100] bg-dark-lighter border border-gray-700 rounded-lg shadow-2xl py-1 w-64 backdrop-blur-xl"
+         @click.stop
+    >
+        <div class="px-4 py-2 border-b border-gray-700/50 mb-1">
+             <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{{ selectedActiveDownloads.length }} Seleccionados</span>
+        </div>
+        <button @click="retryPendingError(); closeContextMenu()" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2">
+            <span>🔄</span> Reintentar Pendientes / Errores
+        </button>
+        <button @click="handleResume(); closeContextMenu()" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2">
+            <span>🚀</span> Reanudar / Ejecutar Todo
+        </button>
     </div>
   </div>
 </template>
@@ -390,11 +425,12 @@ const globalStats = computed(() => {
 const isGlobalRunning = computed(() => ['PENDING', 'RUNNING'].includes(jobStatus.value));
 
 const currentProcessingCompany = computed(() => {
-    // If backend running, show the one that is not completed locally?
-    // Or check backend progress data 'status' field?
-    const ruc = activeDownloads.value.find(r => !getProgress(r).isCompleted);
-    if (!ruc) return null;
-    return { ruc, ...getProgress(ruc) };
+    // 1. Priority: Use backend truth if available in runMetadata
+    const runningRuc = activeDownloads.value.find(ruc => runMetadata.value[ruc]?.status === 'RUNNING');
+    if (runningRuc) {
+         return { ruc: runningRuc, ...getProgress(runningRuc) };
+    }
+    return null;
 });
 
 // --- Methods ---
@@ -514,6 +550,11 @@ const runDownload = async () => {
         headless: true
     };
 
+    // If global status is STOPPED, we treat this as a Resume action explicitly
+    if (jobStatus.value === 'STOPPED') {
+        payload.resume = true;
+    }
+
     try {
         await api.post('/xml/run', payload, { timeout: 120000 });
         // alert(`Descarga Iniciada.`); // Reduced noise
@@ -551,9 +592,14 @@ const startPolling = () => {
                  activeDownloads.value = backendRucs;
                  
                  // Store run metadata for sorting/display
+                 // Ensure we use the LATEST run for each RUC (Sort by ID Ascending)
+                 periodRuns.sort((a, b) => a.id - b.id);
+                 
+                 const newMetadata = {};
                  periodRuns.forEach(r => {
-                     runMetadata.value[r.ruc_empresa] = r;
+                     newMetadata[r.ruc_empresa] = r;
                  });
+                 runMetadata.value = newMetadata;
 
                  // Determine Global Status (Based on filtered period runs?)
                  if (periodRuns.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
@@ -599,12 +645,21 @@ const startPolling = () => {
                 if (effectiveTotal > 0) pct = Math.round((processed / effectiveTotal) * 100);
                 if (pct > 100) pct = 100;
 
+                // Segment Percentages (relative to total width)
+                let pctOk = 0, pctError = 0, pctOther = 0;
+                if (effectiveTotal > 0) {
+                    pctOk = (data.ok / effectiveTotal) * 100;
+                    pctError = (data.error / effectiveTotal) * 100;
+                    pctOther = ((data.not_found + data.auth) / effectiveTotal) * 100;
+                }
+
                 progressList.value[ruc] = {
                     ...data,
                     processedItems: processed,
                     total_items: effectiveTotal,
                     real_total: data.total_items,
                     percentage: pct,
+                    pctOk, pctError, pctOther,
                     isCompleted
                 };
             } catch (e) { 
@@ -637,6 +692,81 @@ const loadEvidences = async (ruc) => {
         const res = await api.get('/xml/evidencias', { params: { ruc, periodo: config.value.periodo }});
         evidences.value = res.data;
     } catch(e) { console.error(e); } finally { loadingEvidences.value = false; }
+};
+
+// --- Context Menu & Multi-select ---
+const selectedActiveDownloads = ref([]);
+const contextMenu = ref({ visible: false, x: 0, y: 0 });
+
+const toggleActiveSelection = (ruc, event) => {
+    if (event.ctrlKey || event.metaKey) {
+        // Toggle
+        const idx = selectedActiveDownloads.value.indexOf(ruc);
+        if (idx > -1) selectedActiveDownloads.value.splice(idx, 1);
+        else selectedActiveDownloads.value.push(ruc);
+    } else {
+        // Single select
+        selectedActiveDownloads.value = [ruc];
+    }
+    // Also view details if single select
+    if (selectedActiveDownloads.value.length === 1) {
+        viewEvidences(ruc);
+    }
+};
+
+const handleContextMenu = (event, ruc) => {
+    // If item not in selection, select it (exclusive)
+    if (!selectedActiveDownloads.value.includes(ruc)) {
+        selectedActiveDownloads.value = [ruc];
+        viewEvidences(ruc);
+    }
+    
+    // Position menu
+    contextMenu.value = {
+        visible: true,
+        x: event.clientX,
+        y: event.clientY
+    };
+    
+    // Add temporary click listener to close
+    setTimeout(() => document.addEventListener('click', closeContextMenu, { once: true }), 0);
+};
+
+const closeContextMenu = () => contextMenu.value.visible = false;
+
+const retryPendingError = async () => {
+    if (selectedActiveDownloads.value.length === 0) return;
+    
+    const payload = {
+        periodo: config.value.periodo,
+        rucs: selectedActiveDownloads.value,
+        mode: 'pending_error',
+        limit: null, // Don't change limit
+        headless: true
+    };
+    
+    try {
+        await api.post('/xml/run', payload);
+        // alert("Reintento iniciado para " + selectedActiveDownloads.value.length + " empresas.");
+    } catch(e) {
+        alert("Error: " + e.message);
+    }
+};
+
+const handleResume = async () => {
+     if (selectedActiveDownloads.value.length === 0) return;
+     
+     const payload = {
+        periodo: config.value.periodo,
+        rucs: selectedActiveDownloads.value,
+        resume: true
+    };
+    
+    try {
+        await api.post('/xml/run', payload);
+    } catch(e) {
+        alert("Error: " + e.message);
+    }
 };
 
 // Report Export

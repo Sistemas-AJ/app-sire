@@ -57,8 +57,10 @@ def run_xml(req: schemas.XMLRunRequest):
                 if req.limit is not None:
                     stats["limit"] = req.limit
                 stats["headless"] = req.headless
+                if req.mode:
+                    stats["mode"] = req.mode
                 existing.stats_json = stats
-                if existing.status in ["ERROR", "PARTIAL", "STOPPED"]:
+                if req.resume and existing.status in ["ERROR", "PARTIAL", "STOPPED"]:
                     existing.status = "PENDING"
                 db.add(existing)
                 processed.append(ruc)
@@ -69,7 +71,7 @@ def run_xml(req: schemas.XMLRunRequest):
                 periodo=req.periodo,
                 modulo="XML",
                 status="PENDING",
-                stats_json={"limit": req.limit, "headless": req.headless},
+                stats_json={"limit": req.limit, "headless": req.headless, "mode": req.mode},
             )
             db.add(run)
             processed.append(ruc)
@@ -105,14 +107,31 @@ def list_evidencias(
     db: Session = Depends(get_db),
 ):
     q = (
-        db.query(CPEEvidencia)
+        db.query(CPEEvidencia, RCEPropuestaItem)
         .join(RCEPropuestaItem, CPEEvidencia.propuesta_item_id == RCEPropuestaItem.id)
         .filter(RCEPropuestaItem.ruc_empresa == ruc, RCEPropuestaItem.periodo == periodo)
         .filter(CPEEvidencia.tipo == "XML")
     )
     if status:
         q = q.filter(CPEEvidencia.status == status)
-    return q.order_by(CPEEvidencia.propuesta_item_id.asc()).all()
+    rows = q.order_by(CPEEvidencia.propuesta_item_id.asc()).all()
+    out = []
+    for ev, item in rows:
+        out.append(
+            schemas.EvidenciaResponse(
+                propuesta_item_id=ev.propuesta_item_id,
+                tipo=ev.tipo,
+                status=ev.status,
+                storage_path=ev.storage_path,
+                xml_filename=f"{item.ruc_emisor}_{item.serie}_{item.numero}.xml",
+                sha256=ev.sha256,
+                error_message=ev.error_message,
+                attempt_count=ev.attempt_count,
+                last_attempt_at=ev.last_attempt_at,
+                downloaded_at=ev.downloaded_at,
+            )
+        )
+    return out
 
 
 @router.get("/detalle", response_model=schemas.DetalleResponse)
@@ -284,6 +303,7 @@ def get_report(ruc: str, periodo: str, db: Session = Depends(get_db)):
                 moneda=item.moneda,
                 status=status,
                 storage_path=ev.storage_path if ev else None,
+                xml_filename=f"{item.ruc_emisor}_{item.serie}_{item.numero}.xml",
                 error_message=ev.error_message if ev else None,
                 detalle_json=det.detalle_json if det else None,
             )
@@ -400,6 +420,7 @@ def repository(
                 total=float(item.total_cp) if item.total_cp is not None else None,
                 status_xml=status_xml,
                 xml_path=ev.storage_path if ev else None,
+                xml_filename=f"{item.ruc_emisor}_{item.serie}_{item.numero}.xml",
                 error_message=ev.error_message if ev else None,
             )
         )
