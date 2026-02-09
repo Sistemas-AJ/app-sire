@@ -20,14 +20,7 @@ TIPO_CP_TO_LABEL = {
     "08": "Factura - Nota de Débito",
 }
 
-_STOP_REQUESTED = set()
-
 def request_stop(ruc: Optional[str] = None, periodo: Optional[str] = None) -> None:
-    if ruc or periodo:
-        _STOP_REQUESTED.add((ruc, periodo))
-    else:
-        _STOP_REQUESTED.add((None, None))
-
     with db_session() as db:
         base = db.query(RCERun).filter(RCERun.modulo == "XML")
         if ruc:
@@ -56,12 +49,7 @@ def _should_stop_db(run_id: Optional[int], ruc: str, periodo: str) -> bool:
 
 
 def _should_stop(ruc: str, periodo: str, run_id: Optional[int]) -> bool:
-    return (
-        (None, None) in _STOP_REQUESTED
-        or (ruc, None) in _STOP_REQUESTED
-        or (ruc, periodo) in _STOP_REQUESTED
-        or _should_stop_db(run_id, ruc, periodo)
-    )
+    return _should_stop_db(run_id, ruc, periodo)
 
 def tipo_label_from_tipo_cp(tipo_cp: str) -> str:
     return TIPO_CP_TO_LABEL.get(tipo_cp, "Factura")
@@ -73,10 +61,6 @@ def run_xml_job_for_empresa_periodo(
     headless: bool = False,
     run_id: Optional[int] = None,
 ):
-    # Nuevo run: limpiar stops previos para esta empresa/periodo
-    _STOP_REQUESTED.discard((None, None))
-    _STOP_REQUESTED.discard((ruc_empresa, periodo))
-    _STOP_REQUESTED.discard((ruc_empresa, None))
     with db_session() as db:
         emp = get_empresa(db, ruc_empresa)
         if not emp:

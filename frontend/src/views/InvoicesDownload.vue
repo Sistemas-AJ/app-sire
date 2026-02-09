@@ -389,7 +389,7 @@ const filteredCompanies = computed(() => {
         list = list.filter(c => c.razon_social.toLowerCase().includes(term) || c.ruc.includes(term));
     }
     
-    return list;
+    return list.sort((a, b) => a.razon_social.localeCompare(b.razon_social));
 });
 
 // Progress Tracking
@@ -601,21 +601,25 @@ const startPolling = () => {
                  });
                  runMetadata.value = newMetadata;
 
-                 // Determine Global Status (Based on filtered period runs?)
-                 if (periodRuns.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
-                 else if (periodRuns.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
-                 else if (periodRuns.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
-                 else if (periodRuns.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
-                 else if (periodRuns.length > 0 && periodRuns.every(r => ['OK', 'STOPPED'].includes(r.status))) jobStatus.value = 'OK'; 
+                 // Determine Global Status (Based on LATEST runs only)
+                 const latestRuns = Object.values(newMetadata);
+                 
+                 if (latestRuns.some(r => r.status === 'RUNNING')) jobStatus.value = 'RUNNING';
+                 else if (latestRuns.some(r => r.status === 'PENDING')) jobStatus.value = 'PENDING';
+                 else if (latestRuns.some(r => r.status === 'ERROR')) jobStatus.value = 'ERROR';
+                 else if (latestRuns.some(r => r.status === 'PARTIAL')) jobStatus.value = 'PARTIAL';
+                 else if (latestRuns.length > 0 && latestRuns.every(r => ['OK', 'STOPPED'].includes(r.status))) jobStatus.value = 'OK'; 
                  else jobStatus.value = 'STOPPED';
 
-                 const anyRunning = periodRuns.some(r => ['RUNNING', 'PENDING'].includes(r.status));
-                 if (!anyRunning && periodRuns.some(r => r.status === 'STOPPED')) jobStatus.value = 'STOPPED';
+                 const anyRunning = latestRuns.some(r => ['RUNNING', 'PENDING'].includes(r.status));
+                 // If nothing is running, but we have stopped runs, treat as STOPPED globally
+                 if (!anyRunning && latestRuns.some(r => r.status === 'STOPPED')) jobStatus.value = 'STOPPED';
                  
                  if (periodRuns.length === 0) jobStatus.value = 'UNKNOWN';
 
                  // Intelligent Completion Override
-                 if (activeDownloads.value.length > 0) {
+                 // Must NOT override if backend explicitly says something is running
+                 if (activeDownloads.value.length > 0 && !anyRunning) {
                      const allCompletedLocally = activeDownloads.value.every(ruc => progressList.value[ruc]?.isCompleted);
                      if (allCompletedLocally) {
                          jobStatus.value = 'OK';
@@ -631,6 +635,12 @@ const startPolling = () => {
         
         // ... (rest of polling loop)
         for (const ruc of activeDownloads.value) {
+            // Optimization: Only poll if running, pending, or we don't have initial data
+            const runStatus = runMetadata.value[ruc]?.status;
+            const needsUpdate = runStatus === 'RUNNING' || runStatus === 'PENDING' || !progressList.value[ruc];
+            
+            if (!needsUpdate) continue;
+
             try {
                 const res = await api.get('/xml/progress', { params: { ruc, periodo: config.value.periodo } });
                 const data = res.data;

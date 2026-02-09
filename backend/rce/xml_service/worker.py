@@ -10,7 +10,9 @@ def pick_next_run():
     with db_session() as db:
         run = (
             db.query(RCERun)
-            .filter(RCERun.modulo == "XML", RCERun.status.in_(["PENDING", "ERROR", "PARTIAL"]))
+            # Solo ejecutar trabajos encolados explícitamente.
+            # ERROR/PARTIAL se reintentan solo cuando el frontend vuelve a encolarlos.
+            .filter(RCERun.modulo == "XML", RCERun.status == "PENDING")
             .order_by(RCERun.started_at.asc().nullsfirst(), RCERun.id.asc())
             .first()
         )

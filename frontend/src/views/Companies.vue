@@ -228,7 +228,7 @@ const fetchCompanies = async () => {
     try {
         const res = await api.get('/empresas/');
         if (Array.isArray(res.data)) {
-            companies.value = res.data;
+            companies.value = res.data.sort((a, b) => a.razon_social.localeCompare(b.razon_social));
         } else {
             throw new Error("La respuesta del servidor no es válida (se esperaba una lista).");
         }

@@ -223,7 +223,9 @@ const fetchCompanies = async () => {
 };
 
 const filteredCompanies = computed(() => {
-    return companies.value.filter(c => c.propuesta_activa);
+    return companies.value
+        .filter(c => c.propuesta_activa)
+        .sort((a, b) => a.razon_social.localeCompare(b.razon_social));
 });
 
 const allSelected = computed(() => {

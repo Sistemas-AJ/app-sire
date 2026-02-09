@@ -255,12 +255,12 @@ const periodMode = ref('select'); // select | manual
 // Company Search (Client-side filter for the dropdown)
 const companySearch = ref('');
 const filteredCompanyOptions = computed(() => {
-    if (!companySearch.value) return companies.value;
+    if (!companySearch.value) return companies.value.sort((a, b) => a.razon_social.localeCompare(b.razon_social));
     const term = companySearch.value.toLowerCase();
     return companies.value.filter(c => 
         c.razon_social.toLowerCase().includes(term) || 
         c.ruc.includes(term)
-    );
+    ).sort((a, b) => a.razon_social.localeCompare(b.razon_social));
 });
 
 const fetchPeriods = async () => {
