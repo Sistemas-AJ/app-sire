@@ -6,6 +6,12 @@ from typing import Dict, Any, Tuple, Optional
 from sqlalchemy.orm import Session
 from core.database import RCEPropuestaItem
 
+# RUCs con CSV SUNAT "especial": la razón social del comprador puede venir con
+# comas sin comillas, desplazando columnas.
+SPECIAL_FULL_ROW_RUCS = {
+    "10411619830",
+}
+
 
 def _parse_date(d: str) -> Optional[date]:
     d = (d or "").strip()
@@ -62,17 +68,42 @@ def load_rce_items_from_csv(
     errors = 0
     seen_keys = set()
 
-    # Usar utf-8-sig ayuda si el archivo fue guardado en Excel (quita el BOM del inicio)
-    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f, delimiter=delimiter)
-        if not reader.fieldnames:
-            raise ValueError("CSV vacío o sin encabezados (sin compras en el periodo).")
+    def _iter_rows():
+        # Caso normal
+        if ruc_empresa not in SPECIAL_FULL_ROW_RUCS:
+            with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.DictReader(f, delimiter=delimiter)
+                if not reader.fieldnames:
+                    raise ValueError("CSV vacío o sin encabezados (sin compras en el periodo).")
+                reader.fieldnames = [name.strip() for name in reader.fieldnames]
+                for i, r in enumerate(reader, start=2):
+                    yield i, r
+            return
 
-        # TRUCO PRO: Limpiar espacios de los encabezados (keys) para evitar errores por "Razón  Social"
-        # Esto normaliza las claves del diccionario `r`
-        reader.fieldnames = [name.strip() for name in reader.fieldnames]
+        # Caso especial: parseo por filas completo y recomposición de columnas.
+        with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+            raw = csv.reader(f, delimiter=delimiter, quoting=csv.QUOTE_NONE)
+            try:
+                headers = [h.strip() for h in next(raw)]
+            except StopIteration:
+                raise ValueError("CSV vacío o sin encabezados (sin compras en el periodo).")
 
-        for i, r in enumerate(reader, start=2):
+            hlen = len(headers)
+            for i, cols in enumerate(raw, start=2):
+                if not cols:
+                    continue
+                if len(cols) > hlen:
+                    # Junta el exceso dentro de la columna 2 (razón social comprador).
+                    extra = len(cols) - hlen
+                    merged = ", ".join([c.strip() for c in cols[1 : 2 + extra] if c is not None and c.strip() != ""])
+                    cols = [cols[0], merged] + cols[2 + extra :]
+                if len(cols) < hlen:
+                    cols = cols + [""] * (hlen - len(cols))
+                elif len(cols) > hlen:
+                    cols = cols[:hlen]
+                yield i, dict(zip(headers, cols))
+
+    for i, r in _iter_rows():
             try:
                 # Mapeo usando los nombres EXACTOS de tu CSV de muestra
                 fecha_emision = _parse_date(r.get("Fecha de emisión"))
