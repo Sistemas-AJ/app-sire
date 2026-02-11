@@ -8,7 +8,7 @@ import main_auto
 
 
 POLL_SECONDS = 3
-RUN_STATUSES = ("PENDING", "ERROR", "PARTIAL")
+RUN_STATUSES = ("PENDING", "ERROR", "PARTIAL", "RUNNING")
 
 
 def _stop_requested(run_id: int) -> bool:
@@ -54,6 +54,21 @@ def _pick_next_run(db):
     )
 
 
+def _recover_orphan_running(db):
+    """
+    Recupera runs que quedaron en RUNNING tras caída/reinicio.
+    Caso típico: servidor se apaga abruptamente y el worker no alcanza a cerrar run.
+    """
+    db.query(BuzonRun).filter(
+        BuzonRun.status == "RUNNING",
+        BuzonRun.queued == False,
+    ).update(
+        {"queued": True},
+        synchronize_session=False,
+    )
+    db.flush()
+
+
 def _summarize_stats(items):
     if not items:
         return {"ok": 0, "skipped": 0, "errors": 0, "analizados": 0}
@@ -77,6 +92,8 @@ def run_worker():
             if last_daily_reset != today:
                 _ensure_daily_runs(db, today)
                 last_daily_reset = today
+
+            _recover_orphan_running(db)
 
             run = _pick_next_run(db)
             if not run:
