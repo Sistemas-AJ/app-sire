@@ -587,14 +587,16 @@ const startPolling = () => {
     // Immediate poll check
     const pollFn = async () => {
         try {
-            // Source of Truth: Get ALL runs
-            const runRes = await api.get('/xml/runs');
+            // Source of Truth: Get ALL runs (Increase limit to cover all history)
+            // Source of Truth: Get ALL runs for specific period (Backend handles filtering)
+            // Route: GET /xml/runs/{periodo}
+            const currentPeriod = config.value.periodo; // String usually
+            const runRes = await api.get(`/xml/runs/${currentPeriod}`);
             const data = runRes.data || [];
             
             // If response is strict empty array, clear everything
             if (Array.isArray(data)) {
-                 // Filter by Current Period & Deduplicate
-                 const currentPeriod = config.value.periodo; // String usually
+                 // Filter by Current Period (Redundant if backend filters, but safe) & Deduplicate
                  
                  // Normalize comparisons
                  const periodRuns = data.filter(r => String(r.periodo) === String(currentPeriod));

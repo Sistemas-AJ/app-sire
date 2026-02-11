@@ -372,14 +372,12 @@ def export_report(ruc: str, periodo: str, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/runs", response_model=List[schemas.XMLRunStatusResponse])
-def list_runs(ruc: Optional[str] = None, periodo: Optional[str] = None, db: Session = Depends(get_db)):
-    q = db.query(RCERun).filter(RCERun.modulo == "XML")
+@router.get("/runs/{periodo}", response_model=List[schemas.XMLRunStatusResponse])
+def list_runs(periodo: str, ruc: Optional[str] = None, db: Session = Depends(get_db)):
+    q = db.query(RCERun).filter(RCERun.modulo == "XML", RCERun.periodo == periodo)
     if ruc:
         q = q.filter(RCERun.ruc_empresa == ruc)
-    if periodo:
-        q = q.filter(RCERun.periodo == periodo)
-    return q.order_by(RCERun.started_at.desc()).limit(50).all()
+    return q.order_by(RCERun.started_at.desc()).limit(500).all()
 
 
 @router.get("/repository", response_model=schemas.XMLRepositoryResponse)
